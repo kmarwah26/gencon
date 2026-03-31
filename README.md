@@ -1,200 +1,104 @@
 # Genco - AI/BI Genie Room Manager
 
-A full-stack Databricks App for managing Genie rooms: browse Unity Catalog, create rooms with AI-assisted metadata, chat with Genie, and route questions across multiple rooms with a supervisor agent.
+A full-stack Databricks App that streamlines creating, managing, and chatting with AI/BI Genie Rooms. Generate sample datasets, build rooms with AI-assisted metadata, cache frequently asked questions with semantic search, and route questions across multiple rooms with a supervisor agent.
 
 ![Databricks App](https://img.shields.io/badge/Databricks-App-orange)
 ![Python](https://img.shields.io/badge/Python-3.11+-blue)
 ![React](https://img.shields.io/badge/React-19-61DAFB)
 
-## Features
+## What It Does
 
-- **Catalog Explorer** — Browse Unity Catalog hierarchy (catalogs, schemas, tables) with search and cached fallback via Lakebase
-- **Create Genie Room** — 5-step wizard: setup, description validation, EDA analysis, SQL instructions, review & create
-- **AI Description Generator** — Generate table and column descriptions using Foundation Models (Claude Sonnet 4.5 via Databricks), save directly to Unity Catalog
-- **Genie Chat** — Chat interface for any Genie room with SQL results display, saved questions, chat history, and semantic cache lookups
-- **Supervisor Agent** — Route questions across multiple Genie rooms with LLM-powered routing (LangGraph) and result synthesis
-- **Semantic Cache** — pgvector-based query caching with Databricks BGE-large embeddings to avoid redundant Genie queries
-- **Services Dashboard** — Monitor connectivity to Workspace, Unity Catalog, SQL Warehouses, Genie, Lakebase, and Foundation Models
-- **Lakebase Persistence** — Saved questions, chat history, room/table cache, and semantic cache stored in managed PostgreSQL
+### Genie Room Creation
 
-## Architecture
+Building a high-quality Genie Room requires well-described tables, clear instructions, and sample queries. Genco automates this with a **5-step creation wizard**:
 
-```
-gencon/
-├── app.py                          # FastAPI entry point (mounts frontend + all API routers)
-├── app.yaml                        # Databricks App config (uvicorn, Lakebase resource)
-├── requirements.txt                # Python deps (for deployment)
-├── pyproject.toml                  # Python project config (uv)
-├── server/
-│   ├── config.py                   # Dual-mode auth (local CLI profile / deployed service principal)
-│   ├── db.py                       # Async Lakebase connection pool (asyncpg + auto token refresh)
-│   └── routes/
-│       ├── analysis.py             # Description validation, EDA, AI generation
-│       ├── cache.py                # Lakebase cache init, sync rooms/tables
-│       ├── catalog.py              # Unity Catalog browsing + cached search
-│       ├── chat_history.py         # Per-user chat message persistence
-│       ├── genie.py                # Genie room CRUD, chat, SQL execution
-│       ├── saved_questions.py      # Per-room saved Q&A
-│       ├── semantic_cache.py       # Semantic cache API routes
-│       ├── supervisor.py           # Multi-room LangGraph supervisor agent
-│       ├── user.py                 # Current user + services status
-│       ├── warehouses.py           # SQL warehouse listing + start
-│       └── workspace_files.py      # Browse/read workspace files
-│   └── semantic_cache/
-│       ├── cache.py                # SemanticCache class (room-scoped, cosine similarity)
-│       ├── embeddings.py           # Databricks BGE-large embedding model
-│       └── setup.py                # pgvector extension + table creation
-├── frontend/
-│   ├── src/                        # React 19 + TypeScript + Tailwind CSS + Vite
-│   │   ├── App.tsx                 # Routes and home page
-│   │   ├── api.ts                  # Type-safe API client
-│   │   ├── store.ts                # Zustand state management
-│   │   └── pages/                  # CatalogExplorer, CreateRoom, GenieChat, SupervisorChat, etc.
-│   └── dist/                       # Built frontend (committed for deployment)
-├── docs/
-│   ├── DEPLOYMENT.md               # CLI-based step-by-step deployment guide
-│   ├── DEPLOYMENT_WORKSPACE.md     # Workspace-only deployment (no local tools needed)
-│   └── deploy_genco.py             # Databricks notebook for fully automated setup
-```
+1. **Setup** -- Pick a name and select tables from Unity Catalog (with search and browse)
+2. **Descriptions** -- Validate which tables and columns already have metadata. For any gaps, AI generates descriptions using Foundation Models and writes them directly to Unity Catalog
+3. **Analysis** -- Run EDA (row counts, column types, time ranges) to understand the dataset before configuring the room
+4. **Instructions** -- Add natural-language instructions and sample question/SQL pairs so Genie knows how to answer
+5. **Create** -- Review everything and create the room in one click
 
-## Prerequisites
+You can also **edit existing rooms** -- add/remove tables, update instructions, and manage sample queries after creation.
 
-- **Databricks workspace** with Unity Catalog and serverless compute enabled
-- **Databricks CLI** v0.229+ authenticated to your workspace
-- **Python** 3.11+
-- **Node.js** 18+ and npm (only needed for frontend development)
-- **uv** (recommended) or pip for Python dependency management
+### Sample Data Generator
 
-## Quick Start (Local Development)
+Need data to demo or test Genie Rooms? The **Sample Data Generator** creates realistic, industry-specific datasets directly in Unity Catalog:
 
-### 1. Clone and install
+- **6 industries**: Retail, Finance, Supply Chain, Manufacturing, Healthcare, Telecom
+- Each industry generates 5-6 related tables with consistent foreign keys
+- **Configurable**: choose the target catalog/schema (or create a new one), date range, and row count
+- **Optional AI-generated metadata**: toggle whether tables and columns get descriptive COMMENTs -- useful for testing Genie with and without metadata
+
+### Semantic Cache
+
+Every Genie Room gets a **semantic cache** powered by pgvector on Lakebase. When a user asks a question:
+
+1. The query is embedded using Databricks BGE-large-en (1024 dimensions)
+2. A cosine similarity search finds the closest previously asked question in that room's cache
+3. If the similarity exceeds the threshold (default 0.85), the cached response is returned instantly -- no Genie API call needed
+4. On a cache miss, the Genie response is stored for future lookups
+
+This means your team's frequently asked questions get faster over time. The cache is **room-scoped** so each Genie Room has its own namespace, and you can view hit rates, entry counts, and manage the cache from the chat sidebar.
+
+### Supervisor Agent
+
+The **Supervisor Agent** lets users ask a single question and have it automatically routed to the most relevant Genie Room. It uses a LangGraph supervisor with a Claude-powered LLM to:
+
+- Evaluate all selected rooms against the question
+- Route to the best-matching room based on room descriptions
+- Show a visual routing flow: which rooms were considered, which was selected, and why
+- Display the Genie response with any generated SQL and query results
+
+### Chat
+
+The chat interface supports single-room conversations with:
+
+- SQL query display (collapsible) and tabular result rendering
+- Semantic cache hit indicators with similarity scores
+- Saved questions (curated Q&A per room, stored in Lakebase)
+- Full chat history per user per room
+
+## Quick Start
+
+### Local Development
 
 ```bash
 git clone https://github.com/kmarwah26/gencon.git
 cd gencon
 
-# Python dependencies
-pip install -r requirements.txt
-# or with uv:
-uv sync
+pip install -r requirements.txt        # or: uv sync
+cd frontend && npm install && cd ..    # only if modifying frontend
 
-# Frontend dependencies (only needed if modifying frontend)
-cd frontend && npm install && cd ..
-```
-
-### 2. Authenticate with Databricks
-
-```bash
 databricks auth login --host https://<workspace-url> --profile gencon
-```
-
-### 3. Run locally
-
-```bash
 DATABRICKS_PROFILE=gencon uvicorn app:app --reload --port 8000
 ```
 
 Open http://localhost:8000
 
-### 4. (Optional) Frontend development
+### Deploy to Databricks
 
-To modify the frontend with hot reload:
-
-```bash
-cd frontend
-npm run dev   # Runs on port 5173 with proxy to :8000
-```
-
-After making changes, rebuild:
-
-```bash
-cd frontend && npm run build
-```
-
-## Deployment
-
-Three deployment options are available:
+Three options:
 
 | Method | Guide | Best for |
 |--------|-------|----------|
-| **Databricks CLI** | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Full control, experienced CLI users |
-| **Workspace UI + Git** | [docs/DEPLOYMENT_WORKSPACE.md](docs/DEPLOYMENT_WORKSPACE.md) | No local tools needed, browser-only |
-| **Automated Notebook** | [docs/deploy_genco.py](docs/deploy_genco.py) | One-click setup, handles permissions automatically |
+| **Automated Notebook** | [docs/deploy_genco.py](docs/deploy_genco.py) | One-click setup (recommended) |
+| **Databricks CLI** | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Full control, CLI users |
+| **Workspace UI + Git** | [docs/DEPLOYMENT_WORKSPACE.md](docs/DEPLOYMENT_WORKSPACE.md) | Browser-only, no local tools |
 
-The notebook method is recommended for first-time deployment — it automatically:
-- Creates the Lakebase instance and database
-- Creates the Databricks App
-- Mirrors your Genie room permissions to the app's service principal
-- Grants Unity Catalog access to the service principal
-- Attaches Lakebase as a connected resource
-- Deploys the app
+The notebook handles everything: Lakebase instance, database, app creation, service principal permissions (Genie rooms, Unity Catalog, Lakebase), and deployment.
 
-## Configuration
+### Prerequisites
 
-### Environment Variables
-
-| Variable | Source | Description |
-|----------|--------|-------------|
-| `DATABRICKS_PROFILE` | Local only | CLI profile name |
-| `DATABRICKS_HOST` | Auto (deployed) | Workspace hostname |
-| `DATABRICKS_APP_NAME` | Auto (deployed) | Indicates deployed mode |
-| `PGHOST` | Lakebase resource | Database host |
-| `PGPORT` | Lakebase resource | Database port (5432) |
-| `PGDATABASE` | Lakebase resource | Database name |
-| `PGUSER` | Lakebase resource | Database user (service principal) |
-| `PGSSLMODE` | app.yaml | SSL mode (require) |
-
-### app.yaml
-
-The `app.yaml` configures the Databricks App runtime:
-- **Command:** `uvicorn app:app --host 0.0.0.0 --port 8000`
-- **Resource:** Lakebase instance `genco-cache` with database `genco`
-- **Env vars:** `PGHOST` is injected from the Lakebase resource; `PGPORT`, `PGDATABASE`, and `PGSSLMODE` are set as static values
-
-## API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/me` | GET | Current user info |
-| `/api/services` | GET | Connected services status |
-| `/api/catalogs` | GET | List Unity Catalogs |
-| `/api/catalogs/{cat}/schemas` | GET | List schemas in a catalog |
-| `/api/catalogs/{cat}/schemas/{sch}/tables` | GET | List tables in a schema |
-| `/api/catalog-search?q=` | GET | Search tables by name or namespace |
-| `/api/warehouses` | GET | List SQL warehouses |
-| `/api/warehouses/{id}/start` | POST | Start a SQL warehouse |
-| `/api/genie/rooms` | GET/POST | List or create Genie rooms |
-| `/api/genie/rooms/{id}` | GET/PUT/DELETE | Get, update, or delete a room |
-| `/api/genie/rooms/{id}/conversations` | POST | Start a conversation |
-| `/api/execute-sql` | POST | Execute SQL via warehouse |
-| `/api/analysis/validate-descriptions` | POST | Check description coverage |
-| `/api/analysis/generate-descriptions` | POST | AI-generate table/column descriptions |
-| `/api/analysis/eda` | POST | Metadata analysis |
-| `/api/analysis/update-table-description` | POST | Update table description in UC |
-| `/api/analysis/update-column-description` | POST | Update column description in UC |
-| `/api/supervisor/ask` | POST | Multi-room supervisor query |
-| `/api/cache/init` | POST | Initialize Lakebase cache tables |
-| `/api/cache/sync-rooms` | POST | Sync Genie rooms to cache |
-| `/api/cache/sync-tables` | POST | Sync catalog tables to cache |
-| `/api/cache/rooms` | GET | Get cached rooms |
-| `/api/cache/tables` | GET | Get cached tables |
-| `/api/saved-questions/{room_id}` | GET/POST | List or add saved questions for a room |
-| `/api/chat-history/{room_id}` | GET/POST | List or add chat messages for a room |
-| `/api/semantic-cache/init` | POST | Initialize semantic cache (pgvector) |
-| `/api/semantic-cache/set` | POST | Store query/response in cache |
-| `/api/semantic-cache/lookup` | POST | Look up similar cached query |
-| `/api/semantic-cache/search` | POST | Search cached queries |
-| `/api/semantic-cache/stats` | GET | Cache statistics |
-| `/api/workspace/list` | GET | List workspace files |
-| `/api/workspace/read` | GET | Read a workspace file |
-| `/api/db-health` | GET | Lakebase connectivity diagnostic |
+- Databricks workspace with Unity Catalog and serverless compute
+- Databricks CLI v0.229+ (for CLI deployment)
+- Python 3.11+, Node.js 18+ (for local development)
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
 | **Backend** | FastAPI, asyncpg, Databricks SDK |
-| **Frontend** | React 19, TypeScript, Tailwind CSS, Vite, Zustand |
+| **Frontend** | React 19, TypeScript, Tailwind CSS, Vite |
 | **Database** | Lakebase (managed PostgreSQL + pgvector) |
 | **AI/ML** | Databricks Foundation Models, LangGraph, LangChain |
 | **Embeddings** | Databricks BGE-large-en (1024 dimensions) |
