@@ -1,0 +1,27 @@
+command:
+  - "python"
+  - "-m"
+  - "uvicorn"
+  - "app:app"
+  - "--host"
+  - "0.0.0.0"
+  - "--port"
+  - "8000"
+
+resources:
+  - name: genco-cache-db
+    type: database
+    config:
+      instance: genco-cache
+      database: genco
+
+env:
+  - name: PGHOST
+    valueFrom: genco-cache-db
+  - name: PGPORT
+    value: "5432"
+  - name: PGDATABASE
+    value: "genco"
+  # PGUSER is set dynamically by the app from the service principal identity
+  - name: PGSSLMODE
+    value: "require"
