@@ -2,7 +2,7 @@
 Sample Data Generator — creates realistic industry-specific tables in Unity Catalog.
 """
 
-import json
+import asyncio
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from databricks_langchain import ChatDatabricks
@@ -73,6 +73,45 @@ class GenerateTableRequest(BaseModel):
     include_descriptions: bool = False
 
 
+# ── SQL execution helper ──
+
+async def _execute_sql(warehouse_id: str, statement: str, timeout_secs: int = 120) -> dict:
+    """Execute a SQL statement via the Statements API with polling."""
+    host = get_workspace_host()
+    headers = get_auth_headers()
+
+    async with httpx.AsyncClient(timeout=timeout_secs) as client:
+        resp = await client.post(
+            f"{host}/api/2.0/sql/statements",
+            headers=headers,
+            json={
+                "warehouse_id": warehouse_id,
+                "statement": statement,
+                "wait_timeout": "0s",  # async — always poll
+            },
+        )
+        data = resp.json()
+        stmt_id = data.get("statement_id", "")
+        status = data.get("status", {}).get("state", "")
+
+        # Poll until done
+        if stmt_id and status in ("PENDING", "RUNNING"):
+            for _ in range(90):
+                await asyncio.sleep(2)
+                poll_resp = await client.get(
+                    f"{host}/api/2.0/sql/statements/{stmt_id}",
+                    headers=headers,
+                )
+                if poll_resp.status_code == 200:
+                    data = poll_resp.json()
+                    status = data.get("status", {}).get("state", "")
+                    if status in ("SUCCEEDED", "FAILED", "CANCELED", "CLOSED"):
+                        break
+
+        error_msg = data.get("status", {}).get("error", {}).get("message", "")
+        return {"status": status, "error": error_msg, "data": data}
+
+
 # ── Endpoints ──
 
 
@@ -88,103 +127,127 @@ async def list_industries():
 
 @router.post("/sample-data/generate-table")
 async def generate_table(req: GenerateTableRequest):
-    """Generate a single table using LLM-produced SQL."""
+    """Generate a single table: LLM creates schema + seed rows, SQL scales to target count."""
     industry_info = INDUSTRIES.get(req.industry)
     if not industry_info:
         raise HTTPException(status_code=400, detail=f"Unknown industry: {req.industry}")
 
     full_schema = f"{req.catalog}.{req.schema_name}"
+    full_table = f"{full_schema}.{req.table_name}"
+
+    # Determine seed size — LLM generates a small seed, SQL scales up
+    seed_rows = min(req.row_count, 25)
 
     desc_instruction = ""
     if req.include_descriptions:
-        desc_instruction = """
-7. Add a COMMENT on the table describing its purpose
-8. Add COMMENT on each column in the CREATE TABLE definition using the COMMENT keyword after the type
-   Example: column_name STRING COMMENT 'Description of this column'
-"""
+        desc_instruction = (
+            "- Add a COMMENT on the table describing its purpose.\n"
+            "- Add COMMENT on each column using: column_name TYPE COMMENT 'description'\n"
+        )
     else:
-        desc_instruction = """
-7. Do NOT add any COMMENT clauses on the table or columns — leave metadata empty.
-"""
+        desc_instruction = "- Do NOT add any COMMENT clauses on the table or columns.\n"
 
-    prompt = f"""You are a data engineer creating realistic sample data for a {industry_info['label']} company.
+    prompt = f"""You are a data engineer creating sample data for a {industry_info['label']} company.
 
-Generate a SQL statement that:
-1. Creates (using CREATE TABLE IF NOT EXISTS) and populates the table `{full_schema}.{req.table_name}`
-2. Uses INSERT INTO with realistic, diverse sample data
-3. Date/timestamp values should be between '{req.date_start}' and '{req.date_end}'
-4. Generate approximately {req.row_count} rows
-5. Include realistic names, amounts, statuses, and other domain-appropriate values
-6. Use appropriate Databricks SQL types (STRING, INT, BIGINT, DOUBLE, DECIMAL(10,2), DATE, TIMESTAMP)
+Generate Databricks SQL that:
+1. CREATE TABLE IF NOT EXISTS {full_table} with column definitions
+2. INSERT INTO {full_table} VALUES with exactly {seed_rows} rows of realistic, diverse data
+3. Date/timestamp values between '{req.date_start}' and '{req.date_end}'
+4. Use Databricks SQL types: STRING, INT, BIGINT, DOUBLE, DECIMAL(10,2), DATE, TIMESTAMP
+5. Include realistic names, amounts, statuses, categories
 {desc_instruction}
-The other tables in this schema are: {', '.join(req.all_tables)}.
-Use consistent foreign key references (e.g., customer_id in orders should reference IDs in customers).
+Other tables in this schema: {', '.join(req.all_tables)}.
+Use consistent ID ranges for foreign keys (e.g., customer_id 1-{seed_rows} in orders references customers).
 
-Return ONLY the SQL — no markdown, no explanation, no code fences. The SQL should be a complete executable statement.
-First CREATE TABLE IF NOT EXISTS with the column definitions, then INSERT INTO with the data.
-Use Databricks SQL syntax (not PostgreSQL or MySQL)."""
+CRITICAL RULES:
+- Return ONLY raw SQL. No markdown, no ``` fences, no explanation.
+- Separate statements with semicolons.
+- Use Databricks SQL syntax only (not PostgreSQL/MySQL).
+- The first column should be an integer ID starting from 1.
+- Use three-part table names WITHOUT backticks: {full_table} (not `{full_table}`)."""
 
     try:
+        # Step 1: LLM generates CREATE TABLE + seed INSERT
         llm = ChatDatabricks(endpoint=LLM_ENDPOINT)
-        response = llm.invoke(prompt)
+        response = await asyncio.to_thread(llm.invoke, prompt)
         sql = response.content.strip()
 
-        # Clean up any markdown fences the LLM may have added
+        # Clean markdown fences
         if sql.startswith("```"):
             lines = sql.split("\n")
             sql = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+        sql = sql.strip().rstrip("`")
 
-        # Split into individual statements and execute each
+        # Remove backticks around the full table name (LLM sometimes adds them)
+        sql = sql.replace(f"`{full_table}`", full_table)
+        sql = sql.replace(f"`{full_schema}`", full_schema)
+
+        # Split into statements
         statements = [s.strip() for s in sql.split(";") if s.strip()]
+        if not statements:
+            raise HTTPException(status_code=500, detail="LLM produced no SQL statements")
 
-        host = get_workspace_host()
-        headers = get_auth_headers()
+        # Step 2: Execute CREATE TABLE
+        create_stmt = statements[0]
+        result = await _execute_sql(req.warehouse_id, create_stmt)
+        if result["status"] != "SUCCEEDED":
+            return {
+                "table": full_table,
+                "status": "FAILED",
+                "sql_preview": create_stmt[:500],
+                "error": f"CREATE TABLE failed: {result['error']}",
+                "executed": [{"statement": "CREATE TABLE", "status": result["status"], "error": result["error"]}],
+            }
 
-        executed = []
-        for stmt in statements:
-            async with httpx.AsyncClient(timeout=120) as client:
-                resp = await client.post(
-                    f"{host}/api/2.0/sql/statements",
-                    headers=headers,
-                    json={
-                        "warehouse_id": req.warehouse_id,
-                        "statement": stmt,
-                        "wait_timeout": "60s",
-                    },
-                )
-                data = resp.json()
-                status = data.get("status", {}).get("state", "")
+        # Step 3: Execute INSERT (seed rows)
+        executed = [{"statement": "CREATE TABLE", "status": "SUCCEEDED", "error": ""}]
 
-                # Poll if pending
-                stmt_id = data.get("statement_id", "")
-                if status == "PENDING" and stmt_id:
-                    import asyncio
-                    for _ in range(60):
-                        await asyncio.sleep(2)
-                        poll_resp = await client.get(
-                            f"{host}/api/2.0/sql/statements/{stmt_id}",
-                            headers=headers,
-                        )
-                        if poll_resp.status_code == 200:
-                            data = poll_resp.json()
-                            status = data.get("status", {}).get("state", "")
-                            if status in ("SUCCEEDED", "FAILED", "CANCELED", "CLOSED"):
-                                break
+        for stmt in statements[1:]:
+            if not stmt.strip().upper().startswith(("INSERT", "ALTER")):
+                continue
+            result = await _execute_sql(req.warehouse_id, stmt)
+            executed.append({
+                "statement": stmt[:100] + "...",
+                "status": result["status"],
+                "error": result["error"],
+            })
+            if result["status"] != "SUCCEEDED":
+                return {
+                    "table": full_table,
+                    "status": "FAILED",
+                    "sql_preview": sql[:500],
+                    "error": f"INSERT failed: {result['error']}",
+                    "executed": executed,
+                }
 
-                error_msg = data.get("status", {}).get("error", {}).get("message", "")
-                executed.append({
-                    "statement": stmt[:200] + ("..." if len(stmt) > 200 else ""),
-                    "status": status,
-                    "error": error_msg,
-                })
+        # Step 4: Scale up to target row count if needed
+        if req.row_count > seed_rows:
+            multiplier = max(1, req.row_count // seed_rows)
+            remaining = req.row_count - seed_rows
+            # UNION ALL the table with itself multiple times
+            unions = " UNION ALL ".join([f"SELECT * FROM {full_table}"] * min(multiplier, 20))
+            scale_sql = f"""
+INSERT INTO {full_table}
+SELECT * FROM ({unions}) _u
+LIMIT {remaining}
+"""
+            result = await _execute_sql(req.warehouse_id, scale_sql)
+            executed.append({
+                "statement": f"Scale to ~{req.row_count} rows",
+                "status": result["status"],
+                "error": result["error"],
+            })
 
+        all_succeeded = all(e["status"] == "SUCCEEDED" for e in executed)
         return {
-            "table": f"{full_schema}.{req.table_name}",
-            "status": "COMPLETED" if all(e["status"] == "SUCCEEDED" for e in executed) else "PARTIAL",
+            "table": full_table,
+            "status": "COMPLETED" if all_succeeded else "PARTIAL",
             "sql_preview": sql[:500],
             "executed": executed,
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -192,29 +255,17 @@ Use Databricks SQL syntax (not PostgreSQL or MySQL)."""
 @router.post("/sample-data/create-schema")
 async def create_schema(req: GenerateRequest):
     """Create catalog and/or schema if they don't exist."""
-    host = get_workspace_host()
-    headers = get_auth_headers()
-
-    results = []
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            # Create schema
-            resp = await client.post(
-                f"{host}/api/2.0/sql/statements",
-                headers=headers,
-                json={
-                    "warehouse_id": req.warehouse_id,
-                    "statement": f"CREATE SCHEMA IF NOT EXISTS {req.catalog}.{req.schema_name}",
-                    "wait_timeout": "30s",
-                },
-            )
-            data = resp.json()
-            results.append({
+        result = await _execute_sql(
+            req.warehouse_id,
+            f"CREATE SCHEMA IF NOT EXISTS {req.catalog}.{req.schema_name}",
+        )
+        return {
+            "results": [{
                 "action": f"CREATE SCHEMA {req.catalog}.{req.schema_name}",
-                "status": data.get("status", {}).get("state", ""),
-                "error": data.get("status", {}).get("error", {}).get("message", ""),
-            })
-
-        return {"results": results}
+                "status": result["status"],
+                "error": result["error"],
+            }]
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
