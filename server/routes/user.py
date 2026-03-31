@@ -130,21 +130,29 @@ async def get_services():
     try:
         pool = await db.get_pool()
         if pool:
-            row = await pool.fetchrow(
-                "SELECT "
-                "(SELECT count(*) FROM genie_rooms) as rooms, "
-                "(SELECT count(*) FROM catalog_tables) as tables"
-            )
+            # Verify connection is alive with a simple query
+            await pool.fetchrow("SELECT 1")
+            # Try to get cache stats, but don't fail if tables don't exist yet
+            details = {
+                "host": os.environ.get("PGHOST", ""),
+                "database": os.environ.get("PGDATABASE", ""),
+            }
+            try:
+                row = await pool.fetchrow(
+                    "SELECT "
+                    "(SELECT count(*) FROM genie_rooms) as rooms, "
+                    "(SELECT count(*) FROM catalog_tables) as tables"
+                )
+                if row:
+                    details["cached_rooms"] = row["rooms"]
+                    details["cached_tables"] = row["tables"]
+            except Exception:
+                details["cache_tables"] = "not initialized (run Setup)"
             services.append({
                 "name": "Lakebase Cache",
                 "type": "database",
                 "status": "connected",
-                "details": {
-                    "host": os.environ.get("PGHOST", ""),
-                    "database": os.environ.get("PGDATABASE", ""),
-                    "cached_rooms": row["rooms"] if row else 0,
-                    "cached_tables": row["tables"] if row else 0,
-                },
+                "details": details,
             })
         else:
             services.append({

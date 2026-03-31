@@ -38,13 +38,38 @@ genco/
 ├── server/               # Backend
 │   ├── config.py         # Dual-mode auth (local / deployed)
 │   ├── db.py             # Lakebase connection pool
+│   ├── semantic_cache/   # pgvector-based semantic cache
 │   └── routes/           # API endpoints
+│       ├── analysis.py       # Description validation, EDA, AI generation
+│       ├── cache.py          # Lakebase cache init, room/table sync
+│       ├── catalog.py        # Unity Catalog browsing + search
+│       ├── chat_history.py   # Per-user chat persistence
+│       ├── genie.py          # Genie room CRUD, conversation API, SQL exec
+│       ├── sample_data.py    # Sample data generator (industry datasets)
+│       ├── saved_questions.py# Saved Q&A per room
+│       ├── semantic_cache.py # Semantic cache API
+│       ├── supervisor.py     # Multi-room LangGraph supervisor agent
+│       ├── user.py           # Current user + service status
+│       ├── warehouses.py     # SQL warehouse listing/start
+│       └── workspace_files.py# Browse/read workspace files
 ├── frontend/             # React + TypeScript + TailwindCSS
 │   ├── package.json
 │   ├── vite.config.ts
 │   └── src/
+│       └── pages/
+│           ├── CatalogExplorer.tsx    # Browse/search Unity Catalog
+│           ├── CreateRoom.tsx         # 5-step room creation wizard
+│           ├── EditRoom.tsx           # Modify existing rooms
+│           ├── GenieChat.tsx          # Single-room chat w/ semantic cache
+│           ├── GenieRooms.tsx         # List all rooms
+│           ├── SampleDataGenerator.tsx# Generate industry sample data
+│           ├── Services.tsx           # Connected services dashboard
+│           ├── SupervisorChat.tsx     # Multi-room question routing
+│           └── Setup.tsx              # First-time setup
 └── docs/
-    └── DEPLOYMENT.md     # This file
+    ├── DEPLOYMENT.md           # CLI deployment guide (this file)
+    ├── DEPLOYMENT_WORKSPACE.md # Workspace-only deployment
+    └── deploy_genco.py         # Automated deployment notebook
 ```
 
 ---
@@ -129,7 +154,7 @@ echo "Lakebase instance is ready!"
 databricks psql genco-cache -p my-profile -- -c "CREATE DATABASE genco;"
 ```
 
-> **Note:** The application tables (`saved_questions`, `chat_history`) are created automatically on first use. No manual schema setup is needed.
+> **Note:** The application tables (`saved_questions`, `chat_history`, `genie_rooms`, `catalog_tables`, `semantic_cache`) are created automatically on first use. No manual schema setup is needed.
 
 ---
 

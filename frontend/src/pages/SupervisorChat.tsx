@@ -20,6 +20,7 @@ import type { GenieRoom } from '../api'
 interface RoomResult {
   room_id: string
   room_title: string
+  room_description?: string
   status: string
   text: string
   query: string
@@ -32,7 +33,8 @@ interface ChatMessage {
   content: string
   question?: string
   routedTo?: RoomResult[]
-  allRooms?: { id: string; title: string }[]
+  allRooms?: { id: string; title: string; description?: string }[]
+  routingReasoning?: string
 }
 
 export default function SupervisorChat() {
@@ -82,7 +84,7 @@ export default function SupervisorChat() {
     setMessages((prev) => [...prev, { role: 'user', content: question }])
     setLoading(true)
 
-    const currentRooms = selectedRoomDescriptions.map((r) => ({ id: r.id, title: r.title }))
+    const currentRooms = selectedRoomDescriptions.map((r) => ({ id: r.id, title: r.title, description: r.description }))
 
     try {
       const result = await api.supervisorAsk({
@@ -101,6 +103,7 @@ export default function SupervisorChat() {
           question,
           routedTo: result.routed_to,
           allRooms: currentRooms,
+          routingReasoning: result.routing_reasoning,
         },
       ])
     } catch (e: any) {
@@ -303,6 +306,7 @@ export default function SupervisorChat() {
                         question={msg.question || ''}
                         allRooms={msg.allRooms}
                         routedTo={msg.routedTo}
+                        routingReasoning={msg.routingReasoning}
                       />
                     )}
 
@@ -330,12 +334,31 @@ export default function SupervisorChat() {
           {loading && (
             <div className="flex gap-3">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shrink-0">
-                <Network className="w-4 h-4 text-white" />
+                <Network className="w-4 h-4 text-white animate-pulse" />
               </div>
-              <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-2xl rounded-bl-md px-4 py-3">
-                <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Routing & querying rooms...
+              <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-2xl rounded-bl-md px-4 py-3 space-y-2">
+                <div className="flex items-center gap-2 text-sm text-[var(--text-primary)] font-medium">
+                  <Loader2 className="w-4 h-4 animate-spin text-[#D0A33C]" />
+                  Analyzing your question...
+                </div>
+                <div className="text-[11px] text-[var(--text-secondary)] space-y-1">
+                  <p className="flex items-center gap-1.5">
+                    <Sparkles className="w-3 h-3 text-[#D0A33C] animate-pulse" />
+                    Evaluating {selectedRooms.size} room{selectedRooms.size !== 1 ? 's' : ''} to find the best match
+                  </p>
+                  <div className="flex flex-wrap gap-1 ml-4">
+                    {rooms
+                      .filter((r) => selectedRooms.has(r.id))
+                      .map((r) => (
+                        <span
+                          key={r.id}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[var(--bg-tertiary)] border border-[var(--border)] text-[10px]"
+                        >
+                          <Database className="w-2.5 h-2.5" />
+                          {r.title}
+                        </span>
+                      ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -382,12 +405,16 @@ function RoutingFlowChart({
   question,
   allRooms,
   routedTo,
+  routingReasoning,
 }: {
   question: string
-  allRooms: { id: string; title: string }[]
+  allRooms: { id: string; title: string; description?: string }[]
   routedTo: RoomResult[]
+  routingReasoning?: string
 }) {
-  const routedIds = new Set(routedTo.map((r) => r.room_id))
+  const routedIds = new Set(
+    routedTo.filter((r) => r.status !== 'SKIPPED').map((r) => r.room_id)
+  )
 
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-secondary)] overflow-hidden">
@@ -402,58 +429,101 @@ function RoutingFlowChart({
           <div className="shrink-0 w-6 h-6 rounded-full bg-[#3F1F14] flex items-center justify-center text-[10px] font-bold text-white">1</div>
           <div className="flex-1 min-w-0">
             <p className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-0.5">Question received</p>
-            <p className="text-xs text-[var(--text-primary)] leading-snug">&ldquo;{question.length > 80 ? question.slice(0, 79) + '...' : question}&rdquo;</p>
+            <p className="text-xs text-[var(--text-primary)] leading-snug">&ldquo;{question.length > 120 ? question.slice(0, 119) + '...' : question}&rdquo;</p>
           </div>
         </div>
 
         {/* Connector */}
         <div className="ml-3 border-l-2 border-dashed border-[#D0A33C]/30 h-2" />
 
-        {/* Step 2: Supervisor analyzes */}
+        {/* Step 2: Supervisor evaluates all rooms */}
         <div className="flex items-start gap-2.5">
           <div className="shrink-0 w-6 h-6 rounded-full bg-[#D0A33C] flex items-center justify-center text-[10px] font-bold text-white">2</div>
           <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-0.5">Supervisor analyzed {allRooms.length} rooms</p>
-            <p className="text-[10px] text-[var(--text-secondary)]">
-              Selected <span className="font-semibold text-[#D0A33C]">{routedTo.length}</span> room{routedTo.length !== 1 ? 's' : ''} to answer
+            <p className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">
+              Evaluated {allRooms.length} available room{allRooms.length !== 1 ? 's' : ''}
             </p>
+            <div className="space-y-1.5">
+              {allRooms.map((room) => {
+                const isRouted = routedIds.has(room.id)
+                return (
+                  <div
+                    key={room.id}
+                    className={`flex items-start gap-2 px-2.5 py-2 rounded-lg transition-all ${
+                      isRouted
+                        ? 'bg-[#D0A33C]/8 border border-[#D0A33C]/20'
+                        : 'bg-[var(--bg-tertiary)]/50 border border-transparent opacity-50'
+                    }`}
+                  >
+                    <Database className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${isRouted ? 'text-[#D0A33C]' : 'text-[var(--text-secondary)]'}`} />
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-[11px] font-medium ${isRouted ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>
+                        {room.title}
+                      </p>
+                      {room.description && (
+                        <p className="text-[10px] text-[var(--text-secondary)] leading-snug mt-0.5 line-clamp-2">
+                          {room.description}
+                        </p>
+                      )}
+                    </div>
+                    {isRouted && (
+                      <span className="shrink-0 text-[9px] font-semibold text-[#D0A33C] bg-[#D0A33C]/15 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                        Match
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </div>
 
         {/* Connector */}
         <div className="ml-3 border-l-2 border-dashed border-[#D0A33C]/30 h-2" />
 
-        {/* Step 3: Room cards */}
+        {/* Step 3: Routing reasoning */}
+        {routingReasoning && (
+          <>
+            <div className="flex items-start gap-2.5">
+              <div className="shrink-0 w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white">3</div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1">Reasoning</p>
+                <div className="bg-blue-500/5 border border-blue-500/15 rounded-lg px-3 py-2">
+                  <p className="text-[11px] text-[var(--text-primary)] leading-relaxed italic">
+                    {routingReasoning}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="ml-3 border-l-2 border-dashed border-[#D0A33C]/30 h-2" />
+          </>
+        )}
+
+        {/* Step 4 (or 3): Selected rooms with results */}
         <div className="flex items-start gap-2.5">
-          <div className="shrink-0 w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center text-[10px] font-bold text-white">3</div>
+          <div className="shrink-0 w-6 h-6 rounded-full bg-emerald-600 flex items-center justify-center text-[10px] font-bold text-white">
+            {routingReasoning ? '4' : '3'}
+          </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">Routed to</p>
+            <p className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">
+              Routed to {routedTo.filter((r) => r.status !== 'SKIPPED').length} room{routedTo.filter((r) => r.status !== 'SKIPPED').length !== 1 ? 's' : ''}
+            </p>
             <div className="flex flex-wrap gap-1.5">
-              {allRooms.map((room) => {
-                const isRouted = routedIds.has(room.id)
-                const result = routedTo.find((r) => r.room_id === room.id)
-                return (
-                  <div
-                    key={room.id}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all ${
-                      isRouted
-                        ? result?.status === 'COMPLETED'
-                          ? 'bg-emerald-500/15 text-emerald-700 border border-emerald-500/30'
-                          : result?.status === 'FAILED'
-                            ? 'bg-red-500/10 text-red-600 border border-red-500/20'
-                            : 'bg-[#D0A33C]/10 text-[#D0A33C] border border-[#D0A33C]/30'
-                        : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border border-transparent opacity-40 line-through'
-                    }`}
-                  >
-                    {isRouted ? (
-                      result?.status === 'COMPLETED' ? <Check className="w-3 h-3" /> : <Loader2 className="w-3 h-3" />
-                    ) : (
-                      <span className="w-3 h-3 text-center leading-3">&mdash;</span>
-                    )}
-                    {room.title}
-                  </div>
-                )
-              })}
+              {routedTo.filter((r) => r.status !== 'SKIPPED').map((r) => (
+                <div
+                  key={r.room_id}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium ${
+                    r.status === 'COMPLETED'
+                      ? 'bg-emerald-500/15 text-emerald-700 border border-emerald-500/30'
+                      : r.status === 'FAILED'
+                        ? 'bg-red-500/10 text-red-600 border border-red-500/20'
+                        : 'bg-[#D0A33C]/10 text-[#D0A33C] border border-[#D0A33C]/30'
+                  }`}
+                >
+                  {r.status === 'COMPLETED' ? <Check className="w-3 h-3" /> : <Loader2 className="w-3 h-3" />}
+                  <span>{r.room_title}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -467,6 +537,9 @@ function RoutingFlowChart({
 
 function RoutingDetails({ results }: { results: RoomResult[] }) {
   const [open, setOpen] = useState(false)
+  const activeResults = results.filter((r) => r.status !== 'SKIPPED')
+
+  if (activeResults.length === 0) return null
 
   return (
     <div className="rounded-lg border border-[var(--border)] overflow-hidden">
@@ -476,7 +549,7 @@ function RoutingDetails({ results }: { results: RoomResult[] }) {
       >
         <Network className="w-3.5 h-3.5" />
         <span>
-          Routed to {results.length} room{results.length !== 1 ? 's' : ''}
+          Routed to {activeResults.length} room{activeResults.length !== 1 ? 's' : ''}
         </span>
         <div className="flex items-center gap-1 ml-1">
           {results.map((r) => (
@@ -504,7 +577,7 @@ function RoutingDetails({ results }: { results: RoomResult[] }) {
         <div className="divide-y divide-[var(--border)]">
           {results.map((r) => (
             <div key={r.room_id} className="px-4 py-3">
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-1">
                 <Sparkles className="w-3.5 h-3.5 text-[#D0A33C]" />
                 <span className="text-sm font-medium text-[var(--text-primary)]">
                   {r.room_title}
@@ -521,6 +594,11 @@ function RoutingDetails({ results }: { results: RoomResult[] }) {
                   {r.status}
                 </span>
               </div>
+              {r.room_description && (
+                <p className="text-[10px] text-[var(--text-secondary)] mb-2 ml-5 italic">
+                  {r.room_description}
+                </p>
+              )}
               {r.text && (
                 <p className="text-xs text-[var(--text-secondary)] mb-2">
                   {r.text}

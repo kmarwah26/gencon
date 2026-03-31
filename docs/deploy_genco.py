@@ -274,10 +274,10 @@ except Exception as e:
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 3b: Grant Unity Catalog Table Access to the Service Principal
+# MAGIC ## Step 3b: Grant Unity Catalog Access to the Service Principal
 # MAGIC
-# MAGIC Mirrors the deploying user's catalog/schema/table access so the app can read the same data.
-# MAGIC This uses the SQL Statement API to run GRANT statements on a serverless warehouse.
+# MAGIC Grants the app's service principal read access and write access (for sample data generation)
+# MAGIC to Unity Catalog tables. Uses the SQL Statement API to run GRANT statements.
 
 # COMMAND ----------
 
@@ -343,10 +343,11 @@ else:
             if catalog in ("system", "samples", "__databricks_internal"):
                 continue
 
-            # Grant USE CATALOG
+            # Grant USE CATALOG + CREATE SCHEMA (for sample data generator)
             ok_cat, err = _run_sql(f"GRANT USE CATALOG ON CATALOG `{catalog}` TO `{sp_id}`", sql_warehouse_id)
+            _run_sql(f"GRANT CREATE SCHEMA ON CATALOG `{catalog}` TO `{sp_id}`", sql_warehouse_id)
             if ok_cat:
-                print(f"  Granted USE CATALOG on '{catalog}'")
+                print(f"  Granted USE CATALOG + CREATE SCHEMA on '{catalog}'")
             else:
                 print(f"  Note (catalog '{catalog}'): {err}")
 
@@ -360,15 +361,19 @@ else:
                 if schema in ("information_schema",):
                     continue
 
-                # Grant USE SCHEMA
+                # Grant USE SCHEMA + CREATE TABLE (for sample data generator)
                 ok_sch, _ = _run_sql(
                     f"GRANT USE SCHEMA ON SCHEMA `{catalog}`.`{schema}` TO `{sp_id}`",
                     sql_warehouse_id,
                 )
+                _run_sql(
+                    f"GRANT CREATE TABLE ON SCHEMA `{catalog}`.`{schema}` TO `{sp_id}`",
+                    sql_warehouse_id,
+                )
 
-                # Grant SELECT on all tables in this schema
+                # Grant SELECT + MODIFY on all tables in this schema
                 ok_sel, err = _run_sql(
-                    f"GRANT SELECT ON SCHEMA `{catalog}`.`{schema}` TO `{sp_id}`",
+                    f"GRANT SELECT, MODIFY ON SCHEMA `{catalog}`.`{schema}` TO `{sp_id}`",
                     sql_warehouse_id,
                 )
                 if ok_sel:

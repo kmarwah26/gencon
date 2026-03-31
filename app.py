@@ -3,7 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import os
 
-from server.routes import catalog, genie, warehouses, user, supervisor, cache, analysis, workspace_files, saved_questions, chat_history, semantic_cache
+from server.routes import catalog, genie, warehouses, user, supervisor, cache, analysis, workspace_files, saved_questions, chat_history, semantic_cache, sample_data
 
 app = FastAPI(title="Genie-Force")
 
@@ -18,6 +18,7 @@ app.include_router(workspace_files.router, prefix="/api")
 app.include_router(saved_questions.router, prefix="/api")
 app.include_router(chat_history.router, prefix="/api")
 app.include_router(semantic_cache.router, prefix="/api")
+app.include_router(sample_data.router, prefix="/api")
 
 
 @app.get("/api/db-health")

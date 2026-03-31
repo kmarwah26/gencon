@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react'
 import { Routes, Route, useNavigate, useLocation, Link } from 'react-router-dom'
 import {
   Database, Plus, MessageSquare, Sparkles, Network, Server,
-  User, ArrowLeft, Pencil, Trash2, Loader2,
+  User, ArrowLeft, Pencil, Trash2, Loader2, FlaskConical,
+  CheckCircle2, XCircle, AlertTriangle, Warehouse, Cpu, Layers,
 } from 'lucide-react'
 import { api } from './api'
-import type { CurrentUser } from './api'
+import type { CurrentUser, ServiceStatus } from './api'
 import CatalogExplorer from './pages/CatalogExplorer'
 import CreateRoom from './pages/CreateRoom'
 import EditRoom from './pages/EditRoom'
@@ -13,13 +14,14 @@ import GenieRooms from './pages/GenieRooms'
 import GenieChat from './pages/GenieChat'
 import SupervisorChat from './pages/SupervisorChat'
 import Services from './pages/Services'
+import SampleDataGenerator from './pages/SampleDataGenerator'
 const tiles = [
   { to: '/catalog', icon: Database, label: 'Catalog Explorer', desc: 'Browse Unity Catalog tables', color: 'from-[#325B6D] to-[#3F1F14]' },
+  { to: '/sample-data', icon: FlaskConical, label: 'Sample Data', desc: 'Generate industry datasets', color: 'from-violet-500 to-fuchsia-600' },
   { to: '/create', icon: Plus, label: 'Create Room', desc: 'Build a new Genie room', color: 'from-[#D0A33C] to-[#E3BC21]' },
   { to: '/rooms', icon: MessageSquare, label: 'Chat', desc: 'Chat with existing rooms', color: 'from-[#959B7A] to-[#325B6D]' },
   { to: '/edit', icon: Pencil, label: 'Edit Rooms', desc: 'Modify tables & instructions', color: 'from-[#D69E77] to-[#E98475]' },
   { to: '/supervisor', icon: Network, label: 'Supervisor Agent', desc: 'Multi-room question routing', color: 'from-[#921A28] to-[#3F1F14]' },
-  { to: '/services', icon: Server, label: 'Services', desc: 'Connected integrations', color: 'from-[#325B6D] to-[#959B7A]' },
 ]
 
 export default function App() {
@@ -88,6 +90,7 @@ export default function App() {
           <Route path="/edit" element={<EditRoomPicker />} />
           <Route path="/edit/:roomId" element={<EditRoom />} />
           <Route path="/supervisor" element={<SupervisorChat />} />
+          <Route path="/sample-data" element={<SampleDataGenerator />} />
           <Route path="/services" element={<Services />} />
         </Routes>
       </main>
@@ -95,56 +98,142 @@ export default function App() {
   )
 }
 
+const svcTypeIcons: Record<string, typeof Database> = {
+  workspace: Server, catalog: Layers, warehouse: Warehouse,
+  genie: MessageSquare, database: Database, llm: Cpu,
+}
+
 function Home({ user }: { user: CurrentUser | null }) {
   const navigate = useNavigate()
+  const [services, setServices] = useState<ServiceStatus[]>([])
+  const [loadingSvc, setLoadingSvc] = useState(true)
+
+  useEffect(() => {
+    api.getServices()
+      .then((r) => setServices(r.services))
+      .catch(() => {})
+      .finally(() => setLoadingSvc(false))
+  }, [])
+
+  const connected = services.filter((s) => s.status === 'connected').length
+  const total = services.length
 
   return (
-    <div className="max-w-4xl mx-auto px-8 py-12">
-      {/* Welcome */}
-      <div className="mb-10">
-        <h2 className="text-3xl font-bold text-[var(--text-primary)] mb-2">
-          {user ? `Welcome, ${user.display_name.split(' ')[0]}` : 'Welcome to Genie-Force'}
-        </h2>
-        <p className="text-[var(--text-secondary)]">
-          Systematically create, configure, and manage AI/BI Genie Rooms across your workspace.
-        </p>
-      </div>
+    <div className="flex gap-8 px-8 py-12">
+      {/* Left: Services panel */}
+      <div className="w-[240px] shrink-0 space-y-4">
+        <div className="flex items-center gap-2 mb-1">
+          <Server className="w-4 h-4 text-[var(--text-secondary)]" />
+          <h3 className="text-sm font-semibold text-[var(--text-primary)]">Services</h3>
+        </div>
 
-      {/* App description */}
-      <div className="mb-10 p-5 rounded-xl bg-gradient-to-br from-[#D0A33C]/5 to-[#3F1F14]/5 border border-[#D0A33C]/15">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-2">What is Genie-Force?</h3>
-        <ul className="space-y-1.5 text-sm text-[var(--text-secondary)] leading-relaxed">
-          <li><span className="text-[#D0A33C] mr-1.5">&#x2022;</span>Create and edit Genie Rooms with full control over tables, instructions, sample queries, and warehouse selection</li>
-          <li><span className="text-[#D0A33C] mr-1.5">&#x2022;</span>Chat with any Genie Room directly, or route questions across multiple rooms via the Supervisor Agent</li>
-          <li><span className="text-[#D0A33C] mr-1.5">&#x2022;</span>Semantic Cache powered by Databricks Lakebase stores frequently asked questions per room, so your team's best Q&amp;A are always at hand</li>
-          <li><span className="text-[#D0A33C] mr-1.5">&#x2022;</span>Explore your Unity Catalog, validate table descriptions, and run exploratory data analysis before building rooms</li>
-        </ul>
-      </div>
-
-      {/* Tiles */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {tiles.map((tile) => (
-          <button
-            key={tile.to}
-            onClick={() => navigate(tile.to)}
-            className="group text-left p-5 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] hover:border-[var(--text-secondary)] hover:shadow-lg transition-all duration-200"
-          >
-            <div className={`w-11 h-11 rounded-lg bg-gradient-to-br ${tile.color} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
-              <tile.icon className="w-5 h-5 text-white" />
+        {loadingSvc ? (
+          <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)] py-4">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking...
+          </div>
+        ) : (
+          <>
+            {/* Summary bar */}
+            <div className="flex items-center gap-2 mb-2">
+              <div className={`w-2 h-2 rounded-full ${connected === total ? 'bg-emerald-500' : connected > 0 ? 'bg-amber-500' : 'bg-red-500'}`} />
+              <span className="text-xs text-[var(--text-secondary)]">
+                {connected}/{total} connected
+              </span>
+              <div className="flex-1 h-1.5 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${connected === total ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                  style={{ width: `${total ? (connected / total) * 100 : 0}%` }}
+                />
+              </div>
             </div>
-            <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">{tile.label}</h3>
-            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{tile.desc}</p>
-          </button>
-        ))}
+
+            {/* Service list */}
+            <div className="space-y-1.5">
+              {services.map((svc) => {
+                const Icon = svcTypeIcons[svc.type] || Server
+                return (
+                  <div
+                    key={svc.name}
+                    className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border ${
+                      svc.status === 'connected'
+                        ? 'bg-emerald-500/5 border-emerald-500/15'
+                        : svc.status === 'error'
+                          ? 'bg-red-500/5 border-red-500/15'
+                          : 'bg-amber-500/5 border-amber-500/15'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5 text-[var(--text-secondary)] shrink-0" />
+                    <span className="text-xs text-[var(--text-primary)] font-medium flex-1 truncate">{svc.name}</span>
+                    {svc.status === 'connected' ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    ) : svc.status === 'error' ? (
+                      <XCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            <button
+              onClick={() => navigate('/services')}
+              className="w-full text-center text-[10px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors pt-1"
+            >
+              View details &rsaquo;
+            </button>
+          </>
+        )}
       </div>
 
-      {/* Quick stats */}
-      <div className="mt-10 p-5 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)]">
-        <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Quick Actions</h3>
-        <div className="flex flex-wrap gap-2">
-          <QuickAction label="Browse samples.nyctaxi" onClick={() => navigate('/catalog')} />
-          <QuickAction label="Create a Genie Room" onClick={() => navigate('/create')} />
-          <QuickAction label="Check Services" onClick={() => navigate('/services')} />
+      {/* Right: Main content */}
+      <div className="flex-1 min-w-0">
+        {/* Welcome */}
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold text-[var(--text-primary)] mb-2">
+            {user ? `Welcome, ${user.display_name.split(' ')[0]}` : 'Welcome to Genie-Force'}
+          </h2>
+          <p className="text-[var(--text-secondary)]">
+            Systematically create, configure, and manage AI/BI Genie Rooms across your workspace.
+          </p>
+        </div>
+
+        {/* App description */}
+        <div className="mb-8 p-5 rounded-xl bg-gradient-to-br from-[#D0A33C]/5 to-[#3F1F14]/5 border border-[#D0A33C]/15">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-2">What is Genie-Force?</h3>
+          <ul className="space-y-1.5 text-sm text-[var(--text-secondary)] leading-relaxed">
+            <li><span className="text-[#D0A33C] mr-1.5">&#x2022;</span>Create and edit Genie Rooms with full control over tables, instructions, sample queries, and warehouse selection</li>
+            <li><span className="text-[#D0A33C] mr-1.5">&#x2022;</span>Chat with any Genie Room directly, or route questions across multiple rooms via the Supervisor Agent</li>
+            <li><span className="text-[#D0A33C] mr-1.5">&#x2022;</span>Semantic Cache powered by Databricks Lakebase stores frequently asked questions per room, so your team's best Q&amp;A are always at hand</li>
+            <li><span className="text-[#D0A33C] mr-1.5">&#x2022;</span>Explore your Unity Catalog, validate table descriptions, and run exploratory data analysis before building rooms</li>
+          </ul>
+        </div>
+
+        {/* Tiles */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {tiles.map((tile) => (
+            <button
+              key={tile.to}
+              onClick={() => navigate(tile.to)}
+              className="group text-left p-5 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] hover:border-[var(--text-secondary)] hover:shadow-lg transition-all duration-200"
+            >
+              <div className={`w-11 h-11 rounded-lg bg-gradient-to-br ${tile.color} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
+                <tile.icon className="w-5 h-5 text-white" />
+              </div>
+              <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">{tile.label}</h3>
+              <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{tile.desc}</p>
+            </button>
+          ))}
+        </div>
+
+        {/* Quick actions */}
+        <div className="mt-8 p-5 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)]">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Quick Actions</h3>
+          <div className="flex flex-wrap gap-2">
+            <QuickAction label="Browse samples.nyctaxi" onClick={() => navigate('/catalog')} />
+            <QuickAction label="Generate sample data" onClick={() => navigate('/sample-data')} />
+            <QuickAction label="Create a Genie Room" onClick={() => navigate('/create')} />
+          </div>
         </div>
       </div>
     </div>

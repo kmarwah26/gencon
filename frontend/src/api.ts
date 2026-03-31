@@ -190,12 +190,14 @@ export const api = {
       routed_to: {
         room_id: string;
         room_title: string;
+        room_description?: string;
         status: string;
         text: string;
         query: string;
         description: string;
         query_result: any;
       }[];
+      routing_reasoning?: string;
       conversation_state: Record<string, string>;
     }>('/supervisor/ask', { method: 'POST', body: JSON.stringify(data) }),
 
@@ -299,6 +301,27 @@ export const api = {
     request<{ ready: boolean }>('/semantic-cache/init', { method: 'POST' }),
   semanticCacheDeleteRoom: (room_id: string) =>
     request<{ cleared: number }>(`/semantic-cache/room/${room_id}`, { method: 'DELETE' }),
+
+  // Sample data generation
+  sampleDataIndustries: () =>
+    request<{ industries: SampleIndustry[] }>('/sample-data/industries'),
+  sampleDataCreateSchema: (data: {
+    industry: string; catalog: string; schema_name: string;
+    create_schema: boolean; warehouse_id: string;
+    date_start: string; date_end: string; row_count: number;
+  }) =>
+    request<{ results: { action: string; status: string; error: string }[] }>(
+      '/sample-data/create-schema', { method: 'POST', body: JSON.stringify(data) }
+    ),
+  sampleDataGenerateTable: (data: {
+    industry: string; table_name: string; all_tables: string[];
+    catalog: string; schema_name: string;
+    date_start: string; date_end: string; row_count: number;
+    warehouse_id: string; include_descriptions?: boolean;
+  }) =>
+    request<{ table: string; status: string; sql_preview: string; executed: any[] }>(
+      '/sample-data/generate-table', { method: 'POST', body: JSON.stringify(data) }
+    ),
 };
 
 export interface DescriptionValidation {
@@ -409,6 +432,13 @@ export interface SemanticCacheStats {
   avg_hits_per_entry: number;
   oldest_entry: string | null;
   most_recent_access: string | null;
+}
+
+export interface SampleIndustry {
+  id: string;
+  label: string;
+  description: string;
+  tables: string[];
 }
 
 export interface CachedTable {
