@@ -1,4 +1,4 @@
-# Genco - AI/BI Genie Room Manager
+# Genie-Force - AI/BI Genie Room Manager
 
 A full-stack Databricks App that streamlines creating, managing, and chatting with AI/BI Genie Rooms. Generate sample datasets, build rooms with AI-assisted metadata, cache frequently asked questions with semantic search, and route questions across multiple rooms with a supervisor agent.
 
@@ -10,7 +10,7 @@ A full-stack Databricks App that streamlines creating, managing, and chatting wi
 
 ### Genie Room Creation
 
-Building a high-quality Genie Room requires well-described tables, clear instructions, and sample queries. Genco automates this with a **5-step creation wizard**:
+Building a high-quality Genie Room requires well-described tables, clear instructions, and sample queries. Genie-Force automates this with a **5-step creation wizard**:
 
 1. **Setup** -- Pick a name and select tables from Unity Catalog (with search and browse)
 2. **Descriptions** -- Validate which tables and columns already have metadata. For any gaps, AI generates descriptions using Foundation Models and writes them directly to Unity Catalog

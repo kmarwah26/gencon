@@ -1,12 +1,12 @@
 # Databricks notebook source
 
 # MAGIC %md
-# MAGIC # Genco Deployment Notebook
+# MAGIC # Genie-Force Deployment Notebook
 # MAGIC
-# MAGIC This notebook deploys the **Genco Genie Room Manager** app to your Databricks workspace.
+# MAGIC This notebook deploys the **Genie-Force** app to your Databricks workspace.
 # MAGIC
 # MAGIC **Prerequisites:**
-# MAGIC - The Genco source code must already be in a Git folder at `/Workspace/Users/<your-email>/genco`
+# MAGIC - The Genie-Force source code must already be in a Git folder at `/Workspace/Users/<your-email>/genco`
 # MAGIC - The `frontend/dist/` directory must be pre-built and committed to the repo
 # MAGIC - Your workspace must have **serverless compute** enabled
 # MAGIC
@@ -42,7 +42,7 @@ dbutils.library.restartPython()
 # COMMAND ----------
 
 APP_NAME = "genco"
-APP_DESCRIPTION = "Genco - Genie Room Manager"
+APP_DESCRIPTION = "Genie-Force - AI/BI Genie Room Manager"
 LAKEBASE_INSTANCE = "genco-cache"
 LAKEBASE_CAPACITY = "CU_1"  # CU_1, CU_2, CU_4, CU_8
 DATABASE_NAME = "genco"

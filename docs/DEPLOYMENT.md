@@ -1,6 +1,6 @@
-# Genco Deployment Guide
+# Genie-Force Deployment Guide
 
-Deploy the Genco Genie Room Manager app to any Databricks workspace using the Databricks CLI.
+Deploy the Genie-Force app to any Databricks workspace using the Databricks CLI.
 
 ---
 
@@ -20,7 +20,7 @@ Your Databricks workspace must have **serverless compute** enabled.
 
 ## Step 1: Get the Source Code
 
-Clone or copy the Genco project to your local machine:
+Clone or copy the Genie-Force project to your local machine:
 
 ```bash
 git clone <repo-url> genco
@@ -111,7 +111,7 @@ This outputs the compiled frontend to `frontend/dist/`. This directory is includ
 
 ## Step 4: Create a Lakebase Instance
 
-Genco uses Lakebase (managed PostgreSQL) to persist saved questions and chat history.
+Genie-Force uses Lakebase (managed PostgreSQL) to persist saved questions and chat history.
 
 ### 4a. Create the instance
 
@@ -162,7 +162,7 @@ databricks psql genco-cache -p my-profile -- -c "CREATE DATABASE genco;"
 
 ```bash
 databricks apps create genco \
-  --description "Genco - Genie Room Manager" \
+  --description "Genie-Force - AI/BI Genie Room Manager" \
   -p my-profile
 ```
 

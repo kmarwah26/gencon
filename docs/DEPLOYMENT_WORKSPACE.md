@@ -1,13 +1,13 @@
-# Genco Deployment Guide (Workspace + Git Only)
+# Genie-Force Deployment Guide (Workspace + Git Only)
 
-Deploy Genco entirely from within your Databricks workspace — no local tools required. All you need is a browser and a Git repo.
+Deploy Genie-Force entirely from within your Databricks workspace — no local tools required. All you need is a browser and a Git repo.
 
 ---
 
 ## Prerequisites
 
 - A Databricks workspace with **serverless compute** enabled
-- The Genco source code in a Git repository (GitHub, GitLab, Azure DevOps, etc.)
+- The Genie-Force source code in a Git repository (GitHub, GitLab, Azure DevOps, etc.)
 - The `frontend/dist/` directory **must be committed** to the repo (this is the pre-built frontend)
 
 > **Important:** Before pushing to Git, build the frontend locally once (`cd frontend && npm install && npm run build`) and commit the `frontend/dist/` folder. This is required because the Databricks workspace does not have Node.js to build the frontend at deploy time.
@@ -56,7 +56,7 @@ CREATE DATABASE genco;
 2. Click **Create app**
 3. Configure:
    - **Name:** `genco`
-   - **Description:** `Genco - Genie Room Manager`
+   - **Description:** `Genie-Force - AI/BI Genie Room Manager`
 4. Click **Create**
 
 ---
@@ -167,7 +167,7 @@ for i in range(20):
 run('databricks psql genco-cache -- -c "CREATE DATABASE genco;"')
 
 # Cell 4: Create app
-run('databricks apps create genco --description "Genco - Genie Room Manager"')
+run('databricks apps create genco --description "Genie-Force - AI/BI Genie Room Manager"')
 
 # Cell 5: Get service principal ID and grant access
 app_info = json.loads(run("databricks apps get genco --output json"))
