@@ -69,7 +69,7 @@ genco/
 └── docs/
     ├── DEPLOYMENT.md           # CLI deployment guide (this file)
     ├── DEPLOYMENT_WORKSPACE.md # Workspace-only deployment
-    └── deploy_genco.py         # Automated deployment notebook
+    └── deploy_genie_force.py         # Automated deployment notebook
 ```
 
 ---

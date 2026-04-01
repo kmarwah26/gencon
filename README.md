@@ -81,7 +81,7 @@ Three options:
 
 | Method | Guide | Best for |
 |--------|-------|----------|
-| **Automated Notebook** | [docs/deploy_genco.py](docs/deploy_genco.py) | One-click setup (recommended) |
+| **Automated Notebook** | [docs/deploy_genie_force.py](docs/deploy_genie_force.py) | One-click setup (recommended) |
 | **Databricks CLI** | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Full control, CLI users |
 | **Workspace UI + Git** | [docs/DEPLOYMENT_WORKSPACE.md](docs/DEPLOYMENT_WORKSPACE.md) | Browser-only, no local tools |
 
