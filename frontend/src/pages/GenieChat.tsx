@@ -68,9 +68,25 @@ export default function GenieChat() {
   const [dbAvailable, setDbAvailable] = useState(true)
   const [historyQuestions, setHistoryQuestions] = useState<string[]>([])
 
+  // Room sample queries
+  const [sampleQueries, setSampleQueries] = useState<{ question: string; sql: string }[]>([])
+
   // Semantic cache
   const [cacheStats, setCacheStats] = useState<SemanticCacheStats | null>(null)
-  const [cacheFeedback, setCacheFeedback] = useState<string | null>(null)
+  // Query source notification
+  const [queryNotification, setQueryNotification] = useState<{
+    type: 'cache-hit' | 'cache-miss' | 'genie-api'
+    similarity?: number
+    threshold?: number
+    message: string
+  } | null>(null)
+  const notificationTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const showNotification = (notif: typeof queryNotification) => {
+    if (notificationTimer.current) clearTimeout(notificationTimer.current)
+    setQueryNotification(notif)
+    notificationTimer.current = setTimeout(() => setQueryNotification(null), 6000)
+  }
 
   // Load room details, warehouses, and current user
   useEffect(() => {
@@ -78,6 +94,7 @@ export default function GenieChat() {
       api.getGenieRoom(roomId).then((r) => {
         setRoomTitle(r.title || 'Genie Room')
         if (r.warehouse_id) setWarehouseId(r.warehouse_id)
+        if (r.sample_queries?.length) setSampleQueries(r.sample_queries)
       }).catch(() => setRoomTitle('Genie Room'))
     }
     api.getCurrentUser().then((u) => setUserId(u.id)).catch(() => {})
@@ -184,9 +201,30 @@ export default function GenieChat() {
         setMessages((prev) => [...prev, assistantMsg])
         persistMsg(assistantMsg)
         refreshCacheStats()
+        showNotification({
+          type: 'cache-hit',
+          similarity: cacheResult.similarity,
+          threshold: cacheResult.threshold,
+          message: 'Answered from Lakebase semantic cache',
+        })
         setLoading(false)
         inputRef.current?.focus()
         return
+      }
+
+      // Show near-miss info, then proceed to Genie API
+      if (cacheResult && !cacheResult.hit && cacheResult.similarity > 0) {
+        showNotification({
+          type: 'cache-miss',
+          similarity: cacheResult.similarity,
+          threshold: cacheResult.threshold,
+          message: 'Cache miss — querying Genie API',
+        })
+      } else {
+        showNotification({
+          type: 'genie-api',
+          message: 'Querying Genie API',
+        })
       }
 
       // Cache miss — call Genie API
@@ -238,9 +276,11 @@ export default function GenieChat() {
           description: assistantMsg.description || '',
           query_result: assistantMsg.queryResult || null,
         }).then(() => {
-          setCacheFeedback('Response cached for future questions')
+          showNotification({
+            type: 'genie-api',
+            message: 'Response cached to Lakebase for future questions',
+          })
           refreshCacheStats()
-          setTimeout(() => setCacheFeedback(null), 3000)
         }).catch(() => {})
       }
     } catch (e: any) {
@@ -589,12 +629,52 @@ export default function GenieChat() {
         <div className="flex-1 overflow-y-auto py-6">
           <div className="max-w-3xl mx-auto px-6 space-y-6">
             {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-32 text-[var(--text-secondary)]">
+              <div className="flex flex-col items-center justify-center py-20 text-[var(--text-secondary)]">
                 {mode === 'genie' ? (
                   <>
                     <Sparkles className="w-16 h-16 mb-4 opacity-15" />
                     <p className="text-xl font-medium text-[var(--text-primary)] opacity-60 mb-2">Ask anything about your data</p>
-                    <p className="text-sm mb-4">Type a question below to get started</p>
+                    <p className="text-sm mb-5">Type a question below or try one of these</p>
+
+                    {/* Sample questions */}
+                    {sampleQueries.length > 0 && (
+                      <div className="w-full max-w-lg space-y-2 mb-5">
+                        {sampleQueries.slice(0, 5).map((sq, i) => (
+                          <button
+                            key={i}
+                            onClick={() => sendMessage(sq.question)}
+                            disabled={loading}
+                            className="w-full text-left px-4 py-3 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] hover:border-[#D0A33C]/40 hover:bg-[#D0A33C]/5 transition-all group"
+                          >
+                            <div className="flex items-start gap-3">
+                              <MessageSquare className="w-4 h-4 text-[#D0A33C] shrink-0 mt-0.5 opacity-60 group-hover:opacity-100 transition-opacity" />
+                              <span className="text-sm text-[var(--text-primary)]">{sq.question}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Saved questions as suggestions if no sample queries */}
+                    {sampleQueries.length === 0 && savedQuestions.length > 0 && (
+                      <div className="w-full max-w-lg space-y-2 mb-5">
+                        <p className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1">Saved questions</p>
+                        {savedQuestions.slice(0, 4).map((sq) => (
+                          <button
+                            key={sq.id}
+                            onClick={() => sendMessage(sq.question)}
+                            disabled={loading}
+                            className="w-full text-left px-4 py-3 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] hover:border-[#D0A33C]/40 hover:bg-[#D0A33C]/5 transition-all group"
+                          >
+                            <div className="flex items-start gap-3">
+                              <Bookmark className="w-4 h-4 text-[#D0A33C] shrink-0 mt-0.5 opacity-60 group-hover:opacity-100 transition-opacity" />
+                              <span className="text-sm text-[var(--text-primary)]">{sq.question}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
                     <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#D0A33C]/5 border border-[#D0A33C]/15 text-[11px] text-[var(--text-secondary)]">
                       <Zap className="w-3.5 h-3.5 text-[#D0A33C]" />
                       Semantic Cache enabled — repeat questions are answered instantly from Lakebase
@@ -679,13 +759,101 @@ export default function GenieChat() {
           </div>
         </div>
 
-        {/* Cache feedback toast */}
-        {cacheFeedback && (
-          <div className="shrink-0 px-5">
-            <div className="max-w-3xl mx-auto">
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#D0A33C]/10 border border-[#D0A33C]/20 text-[11px] text-[#D0A33C] font-medium animate-pulse">
-                <Database className="w-3.5 h-3.5" />
-                {cacheFeedback}
+        {/* Query source notification — floating side pop-up */}
+        {queryNotification && (
+          <div className="fixed top-20 right-6 z-50 animate-in slide-in-from-right">
+            <div
+              className={`w-72 rounded-xl border shadow-lg overflow-hidden transition-all ${
+                queryNotification.type === 'cache-hit'
+                  ? 'bg-emerald-500/10 border-emerald-500/30'
+                  : queryNotification.type === 'cache-miss'
+                    ? 'bg-amber-500/10 border-amber-500/30'
+                    : 'bg-blue-500/10 border-blue-500/30'
+              }`}
+            >
+              {/* Header */}
+              <div className={`flex items-center justify-between px-3 py-2 ${
+                queryNotification.type === 'cache-hit'
+                  ? 'bg-emerald-500/10'
+                  : queryNotification.type === 'cache-miss'
+                    ? 'bg-amber-500/10'
+                    : 'bg-blue-500/10'
+              }`}>
+                <div className="flex items-center gap-2">
+                  {queryNotification.type === 'cache-hit' ? (
+                    <Database className="w-3.5 h-3.5 text-emerald-600" />
+                  ) : queryNotification.type === 'cache-miss' ? (
+                    <Zap className="w-3.5 h-3.5 text-amber-600" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                  )}
+                  <span className={`text-[11px] font-semibold ${
+                    queryNotification.type === 'cache-hit'
+                      ? 'text-emerald-700'
+                      : queryNotification.type === 'cache-miss'
+                        ? 'text-amber-700'
+                        : 'text-blue-700'
+                  }`}>
+                    {queryNotification.type === 'cache-hit' ? 'Lakebase Cache Hit'
+                      : queryNotification.type === 'cache-miss' ? 'Cache Miss'
+                        : 'Genie API'}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setQueryNotification(null)}
+                  className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-0.5"
+                >
+                  <ChevronRight className="w-3 h-3" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="px-3 py-2.5 space-y-2">
+                <p className="text-[11px] text-[var(--text-primary)]">{queryNotification.message}</p>
+
+                {/* Similarity bar */}
+                {queryNotification.similarity != null && queryNotification.similarity > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[9px] text-[var(--text-secondary)]">Semantic similarity</span>
+                      <span className="text-[10px] font-mono font-semibold text-[var(--text-primary)]">
+                        {Math.round(queryNotification.similarity * 100)}%
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          queryNotification.type === 'cache-hit' ? 'bg-emerald-500' : 'bg-amber-500'
+                        }`}
+                        style={{ width: `${Math.round(queryNotification.similarity * 100)}%` }}
+                      />
+                    </div>
+                    {queryNotification.threshold != null && (
+                      <div className="flex items-center justify-between mt-0.5">
+                        <span className="text-[9px] text-[var(--text-secondary)]">
+                          Threshold: {Math.round(queryNotification.threshold * 100)}%
+                        </span>
+                        <span className={`text-[9px] font-medium ${
+                          queryNotification.type === 'cache-hit' ? 'text-emerald-600' : 'text-amber-600'
+                        }`}>
+                          {queryNotification.type === 'cache-hit' ? 'Above threshold' : 'Below threshold'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Source indicator */}
+                <div className="flex items-center gap-1.5 pt-1 border-t border-[var(--border)]">
+                  <div className={`w-1.5 h-1.5 rounded-full ${
+                    queryNotification.type === 'cache-hit' ? 'bg-emerald-500' : 'bg-blue-500'
+                  }`} />
+                  <span className="text-[9px] text-[var(--text-secondary)]">
+                    {queryNotification.type === 'cache-hit'
+                      ? 'Source: Lakebase (pgvector)'
+                      : 'Source: Databricks Genie API'}
+                  </span>
+                </div>
               </div>
             </div>
           </div>

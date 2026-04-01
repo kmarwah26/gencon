@@ -136,7 +136,7 @@ async def generate_table(req: GenerateTableRequest):
     full_table = f"{full_schema}.{req.table_name}"
 
     # Determine seed size — LLM generates a small seed, SQL scales up
-    seed_rows = min(req.row_count, 25)
+    seed_rows = min(req.row_count, 10)
 
     desc_instruction = ""
     if req.include_descriptions:
@@ -147,24 +147,16 @@ async def generate_table(req: GenerateTableRequest):
     else:
         desc_instruction = "- Do NOT add any COMMENT clauses on the table or columns.\n"
 
-    prompt = f"""You are a data engineer creating sample data for a {industry_info['label']} company.
+    prompt = f"""Generate Databricks SQL for a {industry_info['label']} "{req.table_name}" table.
 
-Generate Databricks SQL that:
-1. CREATE TABLE IF NOT EXISTS {full_table} with column definitions
-2. INSERT INTO {full_table} VALUES with exactly {seed_rows} rows of realistic, diverse data
-3. Date/timestamp values between '{req.date_start}' and '{req.date_end}'
-4. Use Databricks SQL types: STRING, INT, BIGINT, DOUBLE, DECIMAL(10,2), DATE, TIMESTAMP
-5. Include realistic names, amounts, statuses, categories
+Requirements:
+- CREATE TABLE IF NOT EXISTS {full_table} (6-10 columns, Databricks types: STRING, INT, DECIMAL(10,2), DATE, TIMESTAMP, DOUBLE)
+- INSERT INTO {full_table} VALUES with exactly {seed_rows} rows of realistic data
+- Dates between '{req.date_start}' and '{req.date_end}'
+- First column: integer ID starting from 1
+- Related tables: {', '.join(req.all_tables)} (use consistent FK IDs 1-{seed_rows})
 {desc_instruction}
-Other tables in this schema: {', '.join(req.all_tables)}.
-Use consistent ID ranges for foreign keys (e.g., customer_id 1-{seed_rows} in orders references customers).
-
-CRITICAL RULES:
-- Return ONLY raw SQL. No markdown, no ``` fences, no explanation.
-- Separate statements with semicolons.
-- Use Databricks SQL syntax only (not PostgreSQL/MySQL).
-- The first column should be an integer ID starting from 1.
-- Use three-part table names WITHOUT backticks: {full_table} (not `{full_table}`)."""
+Rules: Return ONLY raw SQL, no markdown/fences/explanation. Semicolons between statements. No backticks around table names. Databricks SQL only."""
 
     try:
         # Step 1: LLM generates CREATE TABLE + seed INSERT
@@ -254,18 +246,40 @@ LIMIT {remaining}
 
 @router.post("/sample-data/create-schema")
 async def create_schema(req: GenerateRequest):
-    """Create catalog and/or schema if they don't exist."""
+    """Create schema if it doesn't exist, then grant CREATE TABLE to the current principal."""
     try:
+        results = []
+
+        # Create schema
         result = await _execute_sql(
             req.warehouse_id,
             f"CREATE SCHEMA IF NOT EXISTS {req.catalog}.{req.schema_name}",
         )
-        return {
-            "results": [{
-                "action": f"CREATE SCHEMA {req.catalog}.{req.schema_name}",
-                "status": result["status"],
-                "error": result["error"],
-            }]
-        }
+        results.append({
+            "action": f"CREATE SCHEMA IF NOT EXISTS {req.catalog}.{req.schema_name}",
+            "status": result["status"],
+            "error": result["error"],
+        })
+
+        # Grant permissions on the schema to self (ensures the app SP can create tables)
+        # This is a no-op if the principal already owns the schema
+        from server.config import get_workspace_client
+        try:
+            w = get_workspace_client()
+            sp_id = w.config.client_id or ""
+            if sp_id:
+                grant_result = await _execute_sql(
+                    req.warehouse_id,
+                    f"GRANT CREATE TABLE, USE SCHEMA ON SCHEMA {req.catalog}.{req.schema_name} TO `{sp_id}`",
+                )
+                results.append({
+                    "action": f"GRANT CREATE TABLE on {req.catalog}.{req.schema_name}",
+                    "status": grant_result["status"],
+                    "error": grant_result["error"],
+                })
+        except Exception:
+            pass  # Best-effort — may not have GRANT permission
+
+        return {"results": results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

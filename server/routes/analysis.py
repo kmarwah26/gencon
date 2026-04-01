@@ -468,9 +468,9 @@ async def dataset_description(req: TableListRequest):
         "2. Key relationships between tables (join keys, foreign keys)\n"
         "3. Important notes about the data (time ranges, granularity, special values)\n"
         "4. Any conventions or business logic the AI should know when writing queries\n\n"
-        "Write in a direct, instructional tone — this will be used as instructions "
-        "for the AI assistant. Do NOT use markdown headers or bullet points. "
-        "Write in plain paragraphs. Keep it under 200 words.\n\n"
+        "Write in a direct, instructional tone — this will be used as the room description. "
+        "Do NOT use markdown headers or bullet points. "
+        "Write in plain paragraphs. Keep it VERY concise — under 250 characters total.\n\n"
         f"Tables:\n\n{context}"
     )
 

@@ -17,6 +17,7 @@ class SupervisorAskRequest(BaseModel):
     room_ids: list[str]
     room_descriptions: list[dict]  # [{id, title, description}]
     conversation_state: dict | None = None
+    recursion_limit: int = 25
 
 
 class RoutingReasoning(BaseModel):
@@ -56,9 +57,11 @@ def _build_supervisor(rooms: list[dict]):
         "Route the question to the single best agent. If the question spans multiple "
         "domains, pick the most relevant one first. Always delegate — never try to "
         "answer directly.\n\n"
-        "After receiving the agent's response, synthesize the final answer and always "
-        "start your response with a brief note in this format:\n"
-        "[Answered by AGENT_NAME_HERE] — then provide the answer."
+        "IMPORTANT: After delegating to an agent and receiving its response, immediately "
+        "synthesize the final answer. Do NOT retry or delegate again — even if the agent "
+        "says the question is not relevant. Just relay what the agent said.\n\n"
+        "Always start your final response with:\n"
+        "[Answered by AGENT_NAME_HERE] — then provide the answer or the agent's response."
     )
 
     supervisor = create_supervisor(
@@ -176,10 +179,42 @@ async def supervisor_ask(req: SupervisorAskRequest):
         supervisor = _build_supervisor(req.room_descriptions)
 
         # Run the supervisor graph (synchronous langgraph, run in thread)
-        result = await asyncio.to_thread(
-            supervisor.invoke,
-            {"messages": [{"role": "user", "content": req.question}]},
-        )
+        limit = max(5, min(req.recursion_limit, 100))
+        config = {"recursion_limit": limit}
+        try:
+            result = await asyncio.to_thread(
+                supervisor.invoke,
+                {"messages": [{"role": "user", "content": req.question}]},
+                config,
+            )
+        except Exception as graph_err:
+            if "recursion" in str(graph_err).lower():
+                # Return a helpful message instead of crashing
+                return {
+                    "answer": (
+                        f"The supervisor reached the recursion limit ({limit} steps) before "
+                        f"completing. This can happen when the question doesn't match any room's "
+                        f"domain well. Try increasing the limit or rephrasing your question."
+                    ),
+                    "routed_to": [{
+                        "room_id": r["id"],
+                        "room_title": r["title"],
+                        "room_description": r.get("description", ""),
+                        "status": "TIMEOUT",
+                        "text": "",
+                        "query": "",
+                        "description": "",
+                        "query_result": None,
+                    } for r in req.room_descriptions],
+                    "routing_reasoning": f"Recursion limit of {limit} reached. The supervisor could not resolve a final answer within the allowed steps.",
+                    "room_descriptions": [
+                        {"id": r["id"], "title": r["title"], "description": r.get("description", "")}
+                        for r in req.room_descriptions
+                    ],
+                    "recursion_limit_used": limit,
+                    "conversation_state": {},
+                }
+            raise
 
         messages = result.get("messages", [])
 
@@ -260,6 +295,7 @@ async def supervisor_ask(req: SupervisorAskRequest):
                 for r in req.room_descriptions
             ],
             "message_debug": msg_debug,
+            "recursion_limit_used": limit,
             "conversation_state": {},
         }
 

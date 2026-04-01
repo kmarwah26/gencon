@@ -238,9 +238,12 @@ export default function CreateRoom() {
             <label className="flex items-center gap-2 text-sm font-medium mb-2"><Warehouse className="w-4 h-4 text-[var(--text-secondary)]" /> SQL Warehouse</label>
             <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}
               className="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:border-[#D0A33C] transition-colors">
-              <option value="">Auto-select</option>
-              {warehouses.map((wh) => (<option key={wh.id} value={wh.id}>{wh.name} ({wh.state.replace('STATE_', '')})</option>))}
+              <option value="">{warehouses.length === 0 ? 'Loading warehouses...' : 'Select a warehouse'}</option>
+              {warehouses.map((wh) => (<option key={wh.id} value={wh.id}>{wh.name} ({wh.state.replace('STATE_', '').replace('State.', '')})</option>))}
             </select>
+            {warehouses.length === 0 && (
+              <p className="text-xs text-amber-600 mt-1">No SQL warehouses found. Ensure your workspace has at least one SQL warehouse.</p>
+            )}
           </div>
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -912,16 +915,15 @@ function TableDescriptionCard({ table, warehouseId, onSaved }: {
                     className="px-2 py-1 rounded-md text-[10px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors">
                     Discard
                   </button>
-                  {warehouseId && (
-                    <button onClick={saveAllGenerated} disabled={savingAll}
-                      className="px-2.5 py-1 rounded-md bg-[#325B6D] text-white text-[10px] font-medium hover:bg-[#274a59] disabled:opacity-50 flex items-center gap-1 transition-colors">
-                      {savingAll ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Save className="w-2.5 h-2.5" />} Save All
-                    </button>
-                  )}
+                  <button onClick={saveAllGenerated} disabled={savingAll || !warehouseId}
+                    className="px-2.5 py-1 rounded-md bg-[#325B6D] text-white text-[10px] font-medium hover:bg-[#274a59] disabled:opacity-50 flex items-center gap-1 transition-colors"
+                    title={!warehouseId ? 'Select a warehouse in Step 1 first' : 'Save all descriptions to Unity Catalog'}>
+                    {savingAll ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Save className="w-2.5 h-2.5" />} Save All to UC
+                  </button>
                 </div>
               </div>
               <p className="text-[11px] text-[var(--text-secondary)]">
-                Review the generated descriptions below. Edit any you'd like to change, then save all at once{!warehouseId && ' (select a warehouse in Step 1 first)'}.
+                Review the generated descriptions below. Edit any you'd like to change, then click "Save All to UC" to write them to Unity Catalog.{!warehouseId && ' You need to select a SQL warehouse in Step 1 first.'}
               </p>
             </div>
           )}

@@ -52,14 +52,16 @@ async def cache_lookup(req: CacheLookupRequest):
         return_metadata=True,
     )
     if result is None:
-        return {"hit": False, "response": None, "similarity": 0, "metadata": {}}
+        return {"hit": False, "response": None, "similarity": 0, "metadata": {},
+                "threshold": semantic_cache.similarity_threshold}
 
-    response, similarity, metadata = result
+    response, similarity, metadata, is_hit = result
     return {
-        "hit": True,
+        "hit": is_hit,
         "response": response,
         "similarity": round(similarity, 4),
         "metadata": metadata,
+        "threshold": semantic_cache.similarity_threshold,
     }
 
 

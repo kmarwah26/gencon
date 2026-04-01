@@ -46,6 +46,7 @@ export default function SupervisorChat() {
   const [loading, setLoading] = useState(false)
   const [conversationState, setConversationState] = useState<Record<string, string>>({})
   const [panelCollapsed, setPanelCollapsed] = useState(false)
+  const [recursionLimit, setRecursionLimit] = useState(25)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -92,6 +93,7 @@ export default function SupervisorChat() {
         room_ids: Array.from(selectedRooms),
         room_descriptions: selectedRoomDescriptions,
         conversation_state: conversationState,
+        recursion_limit: recursionLimit,
       })
 
       setConversationState(result.conversation_state)
@@ -211,6 +213,33 @@ export default function SupervisorChat() {
                   )
                 })
               )}
+            </div>
+
+            {/* Recursion limit setting */}
+            <div className="p-3 border-t border-[var(--border)]">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                  Max Steps
+                </span>
+                <span className="text-[11px] font-mono text-[var(--text-primary)]">{recursionLimit}</span>
+              </div>
+              <input
+                type="range"
+                min={10}
+                max={50}
+                step={5}
+                value={recursionLimit}
+                onChange={(e) => setRecursionLimit(parseInt(e.target.value))}
+                className="w-full h-1.5 rounded-full appearance-none bg-[var(--bg-tertiary)] accent-[#D0A33C]"
+              />
+              <div className="flex justify-between mt-1">
+                <span className="text-[9px] text-[var(--text-secondary)]">Faster</span>
+                <span className="text-[9px] text-[var(--text-secondary)]">More thorough</span>
+              </div>
+              <p className="text-[9px] text-[var(--text-secondary)] mt-1.5 leading-snug">
+                ~{Math.round(recursionLimit * 1.5)}–{Math.round(recursionLimit * 3)}s estimated.
+                Higher limits allow the supervisor to retry if a room can't answer.
+              </p>
             </div>
 
             {selectedRooms.size > 0 && (

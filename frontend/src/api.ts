@@ -1,13 +1,31 @@
 const BASE = '/api';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const resp = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    ...options,
-  });
+  let resp: Response;
+  try {
+    resp = await fetch(`${BASE}${path}`, {
+      headers: { 'Content-Type': 'application/json', ...options?.headers },
+      ...options,
+    });
+  } catch (e: any) {
+    throw new Error(e.message === 'Failed to fetch' ? 'Network error — the server may be restarting. Please try again.' : e.message);
+  }
   if (!resp.ok) {
     const text = await resp.text();
-    throw new Error(text || resp.statusText);
+    // Extract clean message from HTML error pages (e.g. 502 Bad Gateway)
+    if (text.startsWith('<!') || text.startsWith('<html')) {
+      const status = resp.status;
+      const label = status === 502 ? 'Bad Gateway' : status === 504 ? 'Gateway Timeout' : `HTTP ${status}`;
+      throw new Error(`${label} — the server may be busy or restarting. Please retry in a few seconds.`);
+    }
+    // Try to extract JSON detail
+    try {
+      const json = JSON.parse(text);
+      throw new Error(json.detail || json.message || text);
+    } catch (jsonErr) {
+      if (jsonErr instanceof SyntaxError) throw new Error(text || resp.statusText);
+      throw jsonErr;
+    }
   }
   return resp.json();
 }
@@ -184,6 +202,7 @@ export const api = {
     room_ids: string[];
     room_descriptions: { id: string; title: string; description: string }[];
     conversation_state?: Record<string, string>;
+    recursion_limit?: number;
   }) =>
     request<{
       answer: string;
@@ -198,6 +217,7 @@ export const api = {
         query_result: any;
       }[];
       routing_reasoning?: string;
+      recursion_limit_used?: number;
       conversation_state: Record<string, string>;
     }>('/supervisor/ask', { method: 'POST', body: JSON.stringify(data) }),
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Loader2,
   Database,
@@ -42,6 +43,7 @@ const INDUSTRY_COLORS: Record<string, string> = {
 type Step = 'industry' | 'location' | 'config' | 'descriptions' | 'generate'
 
 export default function SampleDataGenerator() {
+  const navigate = useNavigate()
   const [step, setStep] = useState<Step>('industry')
   const [industries, setIndustries] = useState<SampleIndustry[]>([])
   const [loadingIndustries, setLoadingIndustries] = useState(true)
@@ -100,19 +102,17 @@ export default function SampleDataGenerator() {
     setTableResults([])
 
     try {
-      // Create schema if needed
-      if (createNewSchema && newSchemaName) {
-        await api.sampleDataCreateSchema({
-          industry: selectedIndustry.id,
-          catalog: selectedCatalog,
-          schema_name: newSchemaName,
-          create_schema: true,
-          warehouse_id: selectedWarehouse,
-          date_start: dateStart,
-          date_end: dateEnd,
-          row_count: rowCount,
-        })
-      }
+      // Always ensure schema exists (CREATE SCHEMA IF NOT EXISTS is idempotent)
+      await api.sampleDataCreateSchema({
+        industry: selectedIndustry.id,
+        catalog: selectedCatalog,
+        schema_name: schemaName,
+        create_schema: true,
+        warehouse_id: selectedWarehouse,
+        date_start: dateStart,
+        date_end: dateEnd,
+        row_count: rowCount,
+      })
 
       // Generate each table sequentially
       for (const tableName of selectedIndustry.tables) {
@@ -141,6 +141,40 @@ export default function SampleDataGenerator() {
           ])
         }
       }
+    } finally {
+      setCurrentTable('')
+      setGenerating(false)
+    }
+  }
+
+  const retryTable = async (tableName: string) => {
+    if (!selectedIndustry || !selectedWarehouse || !selectedCatalog || !schemaName) return
+    // Remove the failed entry
+    setTableResults((prev) => prev.filter((r) => r.table !== tableName))
+    setCurrentTable(tableName)
+    setGenerating(true)
+    try {
+      const result = await api.sampleDataGenerateTable({
+        industry: selectedIndustry.id,
+        table_name: tableName,
+        all_tables: selectedIndustry.tables,
+        catalog: selectedCatalog,
+        schema_name: schemaName,
+        date_start: dateStart,
+        date_end: dateEnd,
+        row_count: rowCount,
+        warehouse_id: selectedWarehouse,
+        include_descriptions: includeDescriptions,
+      })
+      setTableResults((prev) => [
+        ...prev,
+        { table: tableName, status: result.status, error: undefined },
+      ])
+    } catch (e: any) {
+      setTableResults((prev) => [
+        ...prev,
+        { table: tableName, status: 'FAILED', error: e.message },
+      ])
     } finally {
       setCurrentTable('')
       setGenerating(false)
@@ -692,7 +726,16 @@ export default function SampleDataGenerator() {
                       <span className="text-[10px] font-semibold text-amber-600 bg-amber-500/10 px-2 py-1 rounded uppercase">Partial</span>
                     )}
                     {result?.status === 'FAILED' && (
-                      <span className="text-[10px] font-semibold text-red-500 bg-red-500/10 px-2 py-1 rounded uppercase">Failed</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-semibold text-red-500 bg-red-500/10 px-2 py-1 rounded uppercase">Failed</span>
+                        <button
+                          onClick={() => retryTable(tableName)}
+                          disabled={generating}
+                          className="text-[10px] font-semibold text-[#D0A33C] bg-[#D0A33C]/10 px-2 py-1 rounded hover:bg-[#D0A33C]/20 transition-colors disabled:opacity-50"
+                        >
+                          Retry
+                        </button>
+                      </div>
                     )}
                     {isCurrentlyGenerating && (
                       <span className="text-[10px] font-semibold text-[#D0A33C] bg-[#D0A33C]/10 px-2 py-1 rounded uppercase">Generating...</span>
@@ -724,25 +767,48 @@ export default function SampleDataGenerator() {
           )}
 
           {!generating && (
-            <div className="flex justify-between pt-4">
-              <button
-                onClick={() => {
-                  setStep('industry')
-                  setTableResults([])
-                  setSelectedIndustry(null)
-                  setSelectedCatalog('')
-                  setSelectedSchema('')
-                  setNewSchemaName('')
-                  setCreateNewSchema(false)
-                }}
-                className="px-4 py-2 rounded-lg bg-[var(--bg-tertiary)] text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
-              >
-                Generate More
-              </button>
+            <div className="space-y-4 pt-4">
+              {/* Success summary */}
               <div className="flex items-center gap-2 text-sm text-emerald-600">
                 <Check className="w-4 h-4" />
                 {tableResults.filter((r) => r.status === 'COMPLETED').length} of{' '}
                 {selectedIndustry?.tables.length} tables created
+                {tableResults.every((r) => r.status === 'COMPLETED') && (
+                  <span className="text-[var(--text-secondary)]">
+                    in <span className="font-mono">{selectedCatalog}.{schemaName}</span>
+                  </span>
+                )}
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => navigate('/')}
+                  className="flex-1 py-2.5 rounded-lg bg-[#D0A33C] hover:bg-[#b88d2e] text-white text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  <Check className="w-4 h-4" />
+                  Done
+                </button>
+                <button
+                  onClick={() => navigate('/create')}
+                  className="py-2.5 px-4 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] hover:border-[#D0A33C]/40 transition-colors"
+                >
+                  Create Genie Room
+                </button>
+                <button
+                  onClick={() => {
+                    setStep('industry')
+                    setTableResults([])
+                    setSelectedIndustry(null)
+                    setSelectedCatalog('')
+                    setSelectedSchema('')
+                    setNewSchemaName('')
+                    setCreateNewSchema(false)
+                  }}
+                  className="py-2.5 px-4 rounded-lg bg-[var(--bg-tertiary)] text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+                >
+                  Generate More
+                </button>
               </div>
             </div>
           )}

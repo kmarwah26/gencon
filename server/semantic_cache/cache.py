@@ -12,7 +12,7 @@ from server.db import db
 from server.semantic_cache.embeddings import get_embedding
 from server.semantic_cache.setup import ensure_semantic_cache_table
 
-DEFAULT_SIMILARITY_THRESHOLD = 0.85
+DEFAULT_SIMILARITY_THRESHOLD = 0.80
 
 
 class SemanticCache:
@@ -99,22 +99,28 @@ class SemanticCache:
                 room_id,
             )
 
-            if row and float(row["similarity"]) >= self.similarity_threshold:
-                # Update hit count
-                await conn.execute(
-                    """
-                    UPDATE semantic_cache
-                    SET hit_count = hit_count + 1,
-                        last_accessed_at = NOW()
-                    WHERE id = $1
-                    """,
-                    row["id"],
-                )
-
+            if row:
+                similarity = float(row["similarity"])
                 meta = json.loads(row["metadata"]) if row["metadata"] else {}
-                if return_metadata:
-                    return (row["response"], float(row["similarity"]), meta)
-                return row["response"]
+
+                if similarity >= self.similarity_threshold:
+                    # Cache hit — update hit count
+                    await conn.execute(
+                        """
+                        UPDATE semantic_cache
+                        SET hit_count = hit_count + 1,
+                            last_accessed_at = NOW()
+                        WHERE id = $1
+                        """,
+                        row["id"],
+                    )
+                    if return_metadata:
+                        return (row["response"], similarity, meta, True)
+                    return row["response"]
+                else:
+                    # Cache miss — but return closest match info if requested
+                    if return_metadata:
+                        return (None, similarity, {}, False)
 
             return None
 
