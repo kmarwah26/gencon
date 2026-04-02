@@ -190,7 +190,26 @@ echo "Service Principal ID: $SP_ID"
 
 ---
 
-## Step 7: Grant Lakebase Access to the Service Principal
+## Step 7: Grant SQL Warehouse Access to the Service Principal
+
+The app needs access to at least one SQL warehouse to create Genie rooms and execute queries:
+
+```bash
+# List warehouses to get the ID
+WH_ID=$(databricks warehouses list -p my-profile --output json | \
+  python3 -c "import sys,json; whs=json.load(sys.stdin); print(whs[0]['id'] if whs else '')")
+
+# Grant CAN_USE
+databricks permissions update sql/warehouses/${WH_ID} \
+  --json "{\"access_control_list\":[{\"service_principal_name\":\"${SP_ID}\",\"permission_level\":\"CAN_USE\"}]}" \
+  -p my-profile
+```
+
+Repeat for additional warehouses if needed.
+
+---
+
+## Step 8: Grant Lakebase Access to the Service Principal
 
 The app's service principal needs permissions to connect to Lakebase and create/manage tables:
 
@@ -207,7 +226,7 @@ You should see four `GRANT` / `ALTER DEFAULT PRIVILEGES` confirmations.
 
 ---
 
-## Step 8: Attach Lakebase as a Connected Resource
+## Step 9: Attach Lakebase as a Connected Resource
 
 This tells the Databricks App to inject Lakebase connection details (`PGHOST`, `PGUSER`, etc.) as environment variables at runtime:
 
@@ -236,7 +255,7 @@ databricks apps get genco -p my-profile --output json | \
 
 ---
 
-## Step 9: Upload Application Files
+## Step 10: Upload Application Files
 
 Determine your workspace username and sync the project files:
 
@@ -262,7 +281,7 @@ Wait for the `Initial Sync Complete` message.
 
 ---
 
-## Step 10: Deploy
+## Step 11: Deploy
 
 ```bash
 USERNAME=$(databricks current-user me -p my-profile --output json | \
@@ -277,7 +296,7 @@ The deployment takes ~30-60 seconds. Wait for `"state": "SUCCEEDED"` in the outp
 
 ---
 
-## Step 11: Open the App
+## Step 12: Open the App
 
 Get the app URL:
 

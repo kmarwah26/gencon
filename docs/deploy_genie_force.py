@@ -212,14 +212,43 @@ if groups:
 else:
     print("  WARNING: Could not find 'users' group. Add the SP manually in Admin Settings > Groups.")
 
-# Mirror the deploying user's Genie room permissions to the service principal
-print("\nGranting Genie room permissions to service principal...")
-print("(Mirroring your permissions so the app has the same access you do)\n")
+# Grant CAN USE on all SQL warehouses to the service principal
+print("\nGranting SQL warehouse access to service principal...")
 import requests as _req
 
 _host = w.config.host.rstrip("/")
 _headers = w.config.authenticate()
 _headers["Content-Type"] = "application/json"
+
+try:
+    wh_resp = _req.get(f"{_host}/api/2.0/sql/warehouses", headers=_headers)
+    wh_resp.raise_for_status()
+    for wh in wh_resp.json().get("warehouses", []):
+        wh_id = wh["id"]
+        wh_name = wh.get("name", wh_id)
+        try:
+            _req.put(
+                f"{_host}/api/2.0/permissions/sql/warehouses/{wh_id}",
+                headers=_headers,
+                json={
+                    "access_control_list": [
+                        {
+                            "service_principal_name": sp_id,
+                            "permission_level": "CAN_USE",
+                        }
+                    ]
+                },
+            ).raise_for_status()
+            print(f"  Granted CAN_USE on warehouse '{wh_name}'")
+        except Exception as e:
+            print(f"  Note (warehouse '{wh_name}'): {e}")
+except Exception as e:
+    print(f"  Could not list warehouses: {e}")
+    print("  You may need to grant CAN_USE on a SQL warehouse manually.")
+
+# Mirror the deploying user's Genie room permissions to the service principal
+print("\nGranting Genie room permissions to service principal...")
+print("(Mirroring your permissions so the app has the same access you do)\n")
 
 try:
     # List all Genie rooms visible to current user

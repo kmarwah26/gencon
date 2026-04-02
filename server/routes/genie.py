@@ -176,8 +176,24 @@ async def create_genie_room(req: CreateRoomRequest):
         "description": req.description.strip() if req.description else req.title,
         "serialized_space": serialized_space,
     }
-    if req.warehouse_id:
-        body["warehouse_id"] = req.warehouse_id
+
+    # Ensure a warehouse is always provided — auto-select if not specified
+    wh_id = req.warehouse_id
+    if not wh_id:
+        try:
+            from server.config import get_workspace_client
+            wc = get_workspace_client()
+            for wh in wc.warehouses.list():
+                state = str(wh.state) if wh.state else ""
+                if "RUNNING" in state or "STARTING" in state:
+                    wh_id = wh.id
+                    break
+                if not wh_id and wh.id:
+                    wh_id = wh.id  # fallback to any warehouse
+        except Exception:
+            pass
+    if wh_id:
+        body["warehouse_id"] = wh_id
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
