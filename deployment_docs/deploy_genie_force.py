@@ -590,6 +590,30 @@ if not source_path.startswith("/Workspace"):
     source_path = f"/Workspace{source_path}"
 print(f"Deploying from: {source_path}")
 
+# Ensure the app is in a deployable state (start it if needed)
+app = w.apps.get(name=APP_NAME)
+app_state = str(app.app_status.state) if app.app_status else ""
+print(f"  App state: {app_state}")
+
+if "RUNNING" not in app_state:
+    print("  App is not running. Starting it first...")
+    try:
+        w.apps.start(name=APP_NAME)
+        # Wait for the app to reach RUNNING state
+        for _attempt in range(30):
+            time.sleep(10)
+            app = w.apps.get(name=APP_NAME)
+            app_state = str(app.app_status.state) if app.app_status else ""
+            if "RUNNING" in app_state:
+                print(f"  App is now {app_state}")
+                break
+            print(f"  Waiting for app to start... (state: {app_state}, attempt {_attempt + 1})")
+        else:
+            print("  WARNING: App did not reach RUNNING state. Attempting deploy anyway...")
+    except Exception as e:
+        print(f"  Note: {e}")
+        print("  Attempting deploy anyway...")
+
 deployment = w.apps.deploy_and_wait(
     app_name=APP_NAME,
     app_deployment=AppDeployment(
