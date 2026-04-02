@@ -282,6 +282,7 @@ except Exception as e:
 # COMMAND ----------
 
 import requests as _req
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 _host = w.config.host.rstrip("/")
 _headers = w.config.authenticate()
@@ -301,7 +302,6 @@ for wh in wh_list:
             sql_warehouse_id = wh["id"]
             break
 if not sql_warehouse_id and wh_list:
-    # Fall back to any available warehouse
     for wh in wh_list:
         if wh.get("state") in ("RUNNING", "STARTING"):
             sql_warehouse_id = wh["id"]
@@ -317,7 +317,7 @@ else:
         """Execute a SQL statement via the Statement API and return success."""
         resp = _req.post(
             f"{_host}/api/2.0/sql/statements",
-            headers=_headers,
+            headers={**w.config.authenticate(), "Content-Type": "application/json"},
             json={
                 "warehouse_id": warehouse_id,
                 "statement": statement,
@@ -332,66 +332,51 @@ else:
             error = data.get("status", {}).get("error", {}).get("message", str(data))
             return False, error
 
-    # Step 1: List catalogs the current user can see
+    def _grant_catalog(catalog):
+        """Grant all permissions on a catalog and its schemas (runs in a thread)."""
+        results = []
+
+        # Grant USE CATALOG + CREATE SCHEMA
+        ok_cat, err = _run_sql(f"GRANT USE CATALOG, CREATE SCHEMA ON CATALOG `{catalog}` TO `{sp_id}`", sql_warehouse_id)
+        if ok_cat:
+            results.append(f"  Granted USE CATALOG + CREATE SCHEMA on '{catalog}'")
+        else:
+            results.append(f"  Note (catalog '{catalog}'): {err}")
+            return results
+
+        # List schemas and batch-grant on each
+        ok_schemas, schema_result = _run_sql(f"SHOW SCHEMAS IN `{catalog}`", sql_warehouse_id)
+        if not ok_schemas:
+            return results
+
+        schemas = [row[0] for row in schema_result.get("result", {}).get("data_array", []) if row]
+        schemas = [s for s in schemas if s != "information_schema"]
+
+        if not schemas:
+            return results
+
+        # Grant on all schemas in parallel using a single combined SQL per schema
+        for schema in schemas:
+            _run_sql(
+                f"GRANT USE SCHEMA, CREATE TABLE, SELECT, MODIFY ON SCHEMA `{catalog}`.`{schema}` TO `{sp_id}`",
+                sql_warehouse_id,
+            )
+        results.append(f"    Granted permissions on {len(schemas)} schemas in '{catalog}'")
+        return results
+
+    # List catalogs
     ok, result = _run_sql("SHOW CATALOGS", sql_warehouse_id)
     if ok:
         catalogs = [row[0] for row in result.get("result", {}).get("data_array", []) if row]
+        catalogs = [c for c in catalogs if c not in ("system", "samples", "__databricks_internal")]
         print(f"  Found {len(catalogs)} catalogs: {', '.join(catalogs)}\n")
 
-        for catalog in catalogs:
-            # Skip system and built-in catalogs
-            if catalog in ("system", "samples", "__databricks_internal"):
-                continue
-
-            # Grant USE CATALOG + CREATE SCHEMA (for sample data generator)
-            ok_cat, err = _run_sql(f"GRANT USE CATALOG ON CATALOG `{catalog}` TO `{sp_id}`", sql_warehouse_id)
-            _run_sql(f"GRANT CREATE SCHEMA ON CATALOG `{catalog}` TO `{sp_id}`", sql_warehouse_id)
-            if ok_cat:
-                print(f"  Granted USE CATALOG + CREATE SCHEMA on '{catalog}'")
-            else:
-                print(f"  Note (catalog '{catalog}'): {err}")
-
-            # List schemas in this catalog
-            ok_schemas, schema_result = _run_sql(f"SHOW SCHEMAS IN `{catalog}`", sql_warehouse_id)
-            if not ok_schemas:
-                continue
-
-            schemas = [row[0] for row in schema_result.get("result", {}).get("data_array", []) if row]
-            for schema in schemas:
-                if schema in ("information_schema",):
-                    continue
-
-                # Grant USE SCHEMA + CREATE TABLE (for sample data generator)
-                ok_sch, _ = _run_sql(
-                    f"GRANT USE SCHEMA ON SCHEMA `{catalog}`.`{schema}` TO `{sp_id}`",
-                    sql_warehouse_id,
-                )
-                _run_sql(
-                    f"GRANT CREATE TABLE ON SCHEMA `{catalog}`.`{schema}` TO `{sp_id}`",
-                    sql_warehouse_id,
-                )
-
-                # Grant SELECT + MODIFY on all tables in this schema
-                ok_sel, err = _run_sql(
-                    f"GRANT SELECT, MODIFY ON SCHEMA `{catalog}`.`{schema}` TO `{sp_id}`",
-                    sql_warehouse_id,
-                )
-                if ok_sel:
-                    print(f"    Granted SELECT on '{catalog}'.'{schema}'")
-                else:
-                    # Fallback: try granting on individual tables
-                    ok_tables, tables_result = _run_sql(
-                        f"SHOW TABLES IN `{catalog}`.`{schema}`", sql_warehouse_id
-                    )
-                    if ok_tables:
-                        tables = [row[1] for row in tables_result.get("result", {}).get("data_array", []) if row and len(row) > 1]
-                        for table in tables:
-                            _run_sql(
-                                f"GRANT SELECT ON TABLE `{catalog}`.`{schema}`.`{table}` TO `{sp_id}`",
-                                sql_warehouse_id,
-                            )
-                        if tables:
-                            print(f"    Granted SELECT on {len(tables)} tables in '{catalog}'.'{schema}'")
+        # Process catalogs in parallel (up to 4 at a time)
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {executor.submit(_grant_catalog, cat): cat for cat in catalogs}
+            for future in as_completed(futures):
+                for line in future.result():
+                    print(line)
     else:
         print(f"  Could not list catalogs: {result}")
 
