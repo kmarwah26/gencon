@@ -6,16 +6,15 @@
 # MAGIC This notebook deploys the **Genie-Force** app to your Databricks workspace.
 # MAGIC
 # MAGIC **Prerequisites:**
-# MAGIC - The Genie-Force source code must already be in a Git folder at `/Workspace/Users/<your-email>/genco`
+# MAGIC - The Genie-Force source code must be in a Git folder in your workspace (this notebook must be inside the repo)
 # MAGIC - The `frontend/dist/` directory must be pre-built and committed to the repo
 # MAGIC - Your workspace must have **serverless compute** enabled
+# MAGIC - At least one SQL warehouse must exist (it will be auto-started if stopped)
 # MAGIC
 # MAGIC **What this notebook does:**
 # MAGIC 1. Creates a Lakebase instance (`genco-cache`)
 # MAGIC 2. Creates the `genco` database
-# MAGIC 3. Creates the Databricks App
-# MAGIC 3b. Mirrors your Genie room permissions to the app's service principal
-# MAGIC 3c. Grants the SP read access to all Unity Catalog tables you have access to
+# MAGIC 3. Creates the Databricks App + grants SP access to warehouses, Genie rooms, and Unity Catalog
 # MAGIC 4. Grants the app's service principal access to Lakebase
 # MAGIC 5. Attaches Lakebase as a connected resource
 # MAGIC 6. Deploys the app
@@ -29,7 +28,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install databricks-sdk --upgrade -q
+# MAGIC %pip install databricks-sdk psycopg2-binary --upgrade -q
 dbutils.library.restartPython()
 
 # COMMAND ----------
@@ -65,7 +64,6 @@ w = WorkspaceClient()
 me = w.current_user.me()
 username = me.user_name
 print(f"Logged in as: {username}")
-print(f"Logged-in user: {username}")
 
 # COMMAND ----------
 
@@ -313,28 +311,43 @@ except Exception as e:
 import requests as _req
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-_host = w.config.host.rstrip("/")
-_headers = w.config.authenticate()
-_headers["Content-Type"] = "application/json"
-
 print("Granting Unity Catalog access to service principal...")
 print(f"  SP Client ID: {sp_id}\n")
 
-# Find a serverless SQL warehouse to run GRANT statements
-warehouses_resp = _req.get(f"{_host}/api/2.0/sql/warehouses", headers=_headers)
+# Find a running SQL warehouse to run GRANT statements
+_host = w.config.host.rstrip("/")
+_wh_headers = {**w.config.authenticate(), "Content-Type": "application/json"}
+warehouses_resp = _req.get(f"{_host}/api/2.0/sql/warehouses", headers=_wh_headers)
 warehouses_resp.raise_for_status()
 wh_list = warehouses_resp.json().get("warehouses", [])
 sql_warehouse_id = None
+
+# Prefer a running serverless/PRO warehouse
 for wh in wh_list:
-    if wh.get("warehouse_type") == "PRO" or wh.get("enable_serverless_compute"):
-        if wh.get("state") in ("RUNNING", "STARTING"):
-            sql_warehouse_id = wh["id"]
-            break
+    if wh.get("state") in ("RUNNING", "STARTING"):
+        sql_warehouse_id = wh["id"]
+        break
+
+# If none running, start the first available warehouse and wait
 if not sql_warehouse_id and wh_list:
-    for wh in wh_list:
-        if wh.get("state") in ("RUNNING", "STARTING"):
-            sql_warehouse_id = wh["id"]
-            break
+    start_wh = wh_list[0]
+    sql_warehouse_id = start_wh["id"]
+    print(f"  No running warehouse found. Starting '{start_wh.get('name', sql_warehouse_id)}'...")
+    try:
+        _req.post(
+            f"{_host}/api/2.0/sql/warehouses/{sql_warehouse_id}/start",
+            headers=_wh_headers,
+        )
+        for _attempt in range(30):
+            time.sleep(10)
+            _status_resp = _req.get(f"{_host}/api/2.0/sql/warehouses/{sql_warehouse_id}", headers={**w.config.authenticate(), "Content-Type": "application/json"})
+            if _status_resp.ok and _status_resp.json().get("state") == "RUNNING":
+                print(f"  Warehouse is now RUNNING.")
+                break
+        else:
+            print(f"  WARNING: Warehouse did not start in time. UC grants may fail.")
+    except Exception as e:
+        print(f"  Could not start warehouse: {e}")
 
 if not sql_warehouse_id:
     print("  WARNING: No running SQL warehouse found. Skipping UC grants.")
