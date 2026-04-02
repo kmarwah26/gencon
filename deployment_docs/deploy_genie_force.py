@@ -518,7 +518,7 @@ import os
 
 # Derive source path from this notebook's location (parent folder)
 notebook_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
-source_path = str(os.path.dirname(os.path.dirname(notebook_path)))  # go up from docs/ to repo root
+source_path = str(os.path.dirname(os.path.dirname(notebook_path)))  # go up from deployment_docs/ to repo root
 # Ensure it starts with /Workspace
 if not source_path.startswith("/Workspace"):
     source_path = f"/Workspace{source_path}"

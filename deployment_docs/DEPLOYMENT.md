@@ -66,10 +66,10 @@ genco/
 │           ├── Services.tsx           # Connected services dashboard
 │           ├── SupervisorChat.tsx     # Multi-room question routing
 │           └── Setup.tsx              # First-time setup
-└── docs/
+└── deployment_docs/
     ├── DEPLOYMENT.md           # CLI deployment guide (this file)
     ├── DEPLOYMENT_WORKSPACE.md # Workspace-only deployment
-    └── deploy_genie_force.py         # Automated deployment notebook
+    └── deploy_genie_force.py   # Automated deployment notebook
 ```
 
 ---

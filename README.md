@@ -81,9 +81,9 @@ Three options:
 
 | Method | Guide | Best for |
 |--------|-------|----------|
-| **Automated Notebook** | [docs/deploy_genie_force.py](docs/deploy_genie_force.py) | One-click setup (recommended) |
-| **Databricks CLI** | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Full control, CLI users |
-| **Workspace UI + Git** | [docs/DEPLOYMENT_WORKSPACE.md](docs/DEPLOYMENT_WORKSPACE.md) | Browser-only, no local tools |
+| **Automated Notebook** | [deployment_docs/deploy_genie_force.py](deployment_docs/deploy_genie_force.py) | One-click setup (recommended) |
+| **Databricks CLI** | [deployment_docs/DEPLOYMENT.md](deployment_docs/DEPLOYMENT.md) | Full control, CLI users |
+| **Workspace UI + Git** | [deployment_docs/DEPLOYMENT_WORKSPACE.md](deployment_docs/DEPLOYMENT_WORKSPACE.md) | Browser-only, no local tools |
 
 The notebook handles everything: Lakebase instance, database, app creation, service principal permissions (Genie rooms, Unity Catalog, Lakebase), and deployment.
 
