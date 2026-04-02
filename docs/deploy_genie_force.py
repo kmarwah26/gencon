@@ -65,7 +65,7 @@ w = WorkspaceClient()
 me = w.current_user.me()
 username = me.user_name
 print(f"Logged in as: {username}")
-print(f"Source path: /Workspace/Users/{username}/genco")
+print(f"Logged-in user: {username}")
 
 # COMMAND ----------
 
@@ -485,8 +485,14 @@ for r in resources:
 # COMMAND ----------
 
 from databricks.sdk.service.apps import AppDeployment, AppDeploymentMode
+import os
 
-source_path = f"/Workspace/Users/{username}/genco"
+# Derive source path from this notebook's location (parent folder)
+notebook_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+source_path = str(os.path.dirname(os.path.dirname(notebook_path)))  # go up from docs/ to repo root
+# Ensure it starts with /Workspace
+if not source_path.startswith("/Workspace"):
+    source_path = f"/Workspace{source_path}"
 print(f"Deploying from: {source_path}")
 
 deployment = w.apps.deploy_and_wait(
