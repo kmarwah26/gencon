@@ -482,32 +482,85 @@ except Exception as e:
 
 # COMMAND ----------
 
-from databricks.sdk.service.apps import AppResource, AppResourceDatabase
-
-# Use the REST API directly to avoid SDK enum issues
-import json as _json
 import requests as _req
 
 _host = w.config.host.rstrip("/")
-_headers = w.config.authenticate()
-_resp = _req.patch(
-    f"{_host}/api/2.0/apps/{APP_NAME}",
-    headers={**_headers, "Content-Type": "application/json"},
-    json={
-        "resources": [
-            {
-                "name": RESOURCE_NAME,
-                "description": "Lakebase for saved questions and chat history",
-                "database": {
-                    "instance_name": LAKEBASE_INSTANCE,
-                    "database_name": DATABASE_NAME,
-                    "permission": "CAN_CONNECT_AND_CREATE",
-                },
-            }
-        ]
-    },
-)
-_resp.raise_for_status()
+
+# Try multiple API approaches — the endpoint varies by workspace version
+resource_payload = {
+    "resources": [
+        {
+            "name": RESOURCE_NAME,
+            "description": "Lakebase for saved questions and chat history",
+            "database": {
+                "instance_name": LAKEBASE_INSTANCE,
+                "database_name": DATABASE_NAME,
+                "permission": "CAN_CONNECT_AND_CREATE",
+            },
+        }
+    ]
+}
+
+updated = False
+for method in ["PATCH", "PUT"]:
+    _headers = {**w.config.authenticate(), "Content-Type": "application/json"}
+    try:
+        _resp = _req.request(
+            method,
+            f"{_host}/api/2.0/apps/{APP_NAME}",
+            headers=_headers,
+            json=resource_payload,
+        )
+        if _resp.status_code < 300:
+            updated = True
+            print(f"  Resource attached via {method} /api/2.0/apps/{APP_NAME}")
+            break
+        elif _resp.status_code == 404:
+            # Try the update endpoint variant
+            _resp2 = _req.request(
+                method,
+                f"{_host}/api/2.0/preview/apps/{APP_NAME}",
+                headers=_headers,
+                json=resource_payload,
+            )
+            if _resp2.status_code < 300:
+                updated = True
+                print(f"  Resource attached via {method} /api/2.0/preview/apps/{APP_NAME}")
+                break
+    except Exception:
+        continue
+
+# Fallback: use SDK update
+if not updated:
+    try:
+        from databricks.sdk.service.apps import App, AppResource, AppResourceDatabase
+        w.apps.update(
+            name=APP_NAME,
+            app=App(
+                name=APP_NAME,
+                resources=[
+                    AppResource(
+                        name=RESOURCE_NAME,
+                        description="Lakebase for saved questions and chat history",
+                        database=AppResourceDatabase(
+                            instance_name=LAKEBASE_INSTANCE,
+                            database_name=DATABASE_NAME,
+                            permission="CAN_CONNECT_AND_CREATE",
+                        ),
+                    )
+                ],
+            ),
+        )
+        updated = True
+        print("  Resource attached via SDK update")
+    except Exception as e:
+        print(f"  SDK update failed: {e}")
+
+if not updated:
+    print("  WARNING: Could not attach Lakebase resource automatically.")
+    print(f"  Manually add resource '{RESOURCE_NAME}' in the app settings UI:")
+    print(f"    Instance: {LAKEBASE_INSTANCE}, Database: {DATABASE_NAME}, Permission: CAN_CONNECT_AND_CREATE")
+
 updated_app = w.apps.get(name=APP_NAME)
 
 resources = updated_app.resources or []
