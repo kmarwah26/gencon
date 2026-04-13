@@ -300,10 +300,10 @@ export const api = {
     }),
 
   // Semantic cache
-  semanticCacheLookup: (room_id: string, query: string) =>
+  semanticCacheLookup: (room_id: string, query: string, similarity_threshold?: number) =>
     request<SemanticCacheResult>('/semantic-cache/lookup', {
       method: 'POST',
-      body: JSON.stringify({ room_id, query }),
+      body: JSON.stringify({ room_id, query, ...(similarity_threshold != null && { similarity_threshold }) }),
     }),
   semanticCacheSet: (room_id: string, query: string, response: string, metadata?: Record<string, any>) =>
     request<{ id: number; cached: boolean }>('/semantic-cache/set', {

@@ -20,6 +20,7 @@ class CacheSetRequest(BaseModel):
 class CacheLookupRequest(BaseModel):
     room_id: str
     query: str
+    similarity_threshold: Optional[float] = None
 
 
 class CacheSearchRequest(BaseModel):
@@ -46,14 +47,16 @@ async def cache_set(req: CacheSetRequest):
 @router.post("/semantic-cache/lookup")
 async def cache_lookup(req: CacheLookupRequest):
     """Look up a semantically similar cached response."""
+    threshold = req.similarity_threshold if req.similarity_threshold is not None else semantic_cache.similarity_threshold
     result = await semantic_cache.get(
         room_id=req.room_id,
         query=req.query,
         return_metadata=True,
+        similarity_threshold=req.similarity_threshold,
     )
     if result is None:
         return {"hit": False, "response": None, "similarity": 0, "metadata": {},
-                "threshold": semantic_cache.similarity_threshold}
+                "threshold": threshold}
 
     response, similarity, metadata, is_hit = result
     return {
@@ -61,7 +64,7 @@ async def cache_lookup(req: CacheLookupRequest):
         "response": response,
         "similarity": round(similarity, 4),
         "metadata": metadata,
-        "threshold": semantic_cache.similarity_threshold,
+        "threshold": threshold,
     }
 
 

@@ -73,6 +73,7 @@ export default function GenieChat() {
 
   // Semantic cache
   const [cacheStats, setCacheStats] = useState<SemanticCacheStats | null>(null)
+  const [similarityThreshold, setSimilarityThreshold] = useState(0.80)
   // Query source notification
   const [queryNotification, setQueryNotification] = useState<{
     type: 'cache-hit' | 'cache-miss' | 'genie-api'
@@ -183,7 +184,7 @@ export default function GenieChat() {
       // Check semantic cache first
       let cacheResult: any = null
       try {
-        cacheResult = await api.semanticCacheLookup(roomId, msg)
+        cacheResult = await api.semanticCacheLookup(roomId, msg, similarityThreshold)
       } catch { /* cache miss or unavailable */ }
 
       if (cacheResult?.hit) {
@@ -561,9 +562,33 @@ export default function GenieChat() {
                   <li>You ask a question in chat</li>
                   <li>The question is converted to a vector embedding</li>
                   <li>Lakebase searches for similar past questions using pgvector</li>
-                  <li>If a match is found (&ge;85% similarity), the cached answer is returned instantly</li>
+                  <li>If a match is found (above your similarity threshold), the cached answer is returned instantly</li>
                   <li>If no match, Genie answers and the response is cached for next time</li>
                 </ol>
+              </div>
+
+              {/* Similarity threshold slider */}
+              <div className="rounded-lg border border-[var(--border)] p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] font-semibold text-[var(--text-primary)]">Similarity Threshold</p>
+                  <span className="text-xs font-mono font-semibold text-[#D0A33C]">{Math.round(similarityThreshold * 100)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={50}
+                  max={100}
+                  step={1}
+                  value={Math.round(similarityThreshold * 100)}
+                  onChange={(e) => setSimilarityThreshold(Number(e.target.value) / 100)}
+                  className="w-full h-1.5 rounded-full appearance-none cursor-pointer accent-[#D0A33C] bg-[var(--bg-tertiary)]"
+                />
+                <div className="flex justify-between mt-1">
+                  <span className="text-[9px] text-[var(--text-secondary)]">50% (loose)</span>
+                  <span className="text-[9px] text-[var(--text-secondary)]">100% (exact)</span>
+                </div>
+                <p className="text-[9px] text-[var(--text-secondary)] mt-1.5 leading-relaxed">
+                  Lower values return more cache hits but may be less precise. Higher values require closer semantic matches.
+                </p>
               </div>
 
               {/* Stats */}

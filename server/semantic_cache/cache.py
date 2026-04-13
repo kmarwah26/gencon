@@ -61,6 +61,7 @@ class SemanticCache:
         room_id: str,
         query: str,
         return_metadata: bool = False,
+        similarity_threshold: Optional[float] = None,
     ) -> Optional[str | Tuple[str, float, Dict[str, Any]]]:
         """Retrieve a cached response if a semantically similar query exists.
 
@@ -68,6 +69,7 @@ class SemanticCache:
             room_id: Scope the lookup to this Genie room.
             query: The user's question.
             return_metadata: If True, return (response, similarity, metadata).
+            similarity_threshold: Override the default threshold for this lookup.
 
         Returns:
             Cached response string (or tuple), or None on cache miss.
@@ -77,6 +79,7 @@ class SemanticCache:
         if not pool:
             return None
 
+        threshold = similarity_threshold if similarity_threshold is not None else self.similarity_threshold
         embedding = get_embedding(query)
         emb_str = str(embedding)
 
@@ -103,7 +106,7 @@ class SemanticCache:
                 similarity = float(row["similarity"])
                 meta = json.loads(row["metadata"]) if row["metadata"] else {}
 
-                if similarity >= self.similarity_threshold:
+                if similarity >= threshold:
                     # Cache hit — update hit count
                     await conn.execute(
                         """
