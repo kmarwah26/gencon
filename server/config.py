@@ -3,12 +3,19 @@ from databricks.sdk import WorkspaceClient
 
 IS_DATABRICKS_APP = bool(os.environ.get("DATABRICKS_APP_NAME"))
 
+# Reuse a single WorkspaceClient instance to avoid repeated SDK initialization
+_workspace_client: WorkspaceClient | None = None
+
 
 def get_workspace_client() -> WorkspaceClient:
-    if IS_DATABRICKS_APP:
-        return WorkspaceClient()
-    profile = os.environ.get("DATABRICKS_PROFILE", "DEFAULT")
-    return WorkspaceClient(profile=profile)
+    global _workspace_client
+    if _workspace_client is None:
+        if IS_DATABRICKS_APP:
+            _workspace_client = WorkspaceClient()
+        else:
+            profile = os.environ.get("DATABRICKS_PROFILE", "DEFAULT")
+            _workspace_client = WorkspaceClient(profile=profile)
+    return _workspace_client
 
 
 def get_workspace_host() -> str:

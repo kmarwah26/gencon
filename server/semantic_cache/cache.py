@@ -37,7 +37,7 @@ class SemanticCache:
         if not pool:
             return None
 
-        embedding = get_embedding(query)
+        embedding = await get_embedding(query)
         metadata_json = json.dumps(metadata or {})
 
         async with pool.acquire() as conn:
@@ -80,7 +80,7 @@ class SemanticCache:
             return None
 
         threshold = similarity_threshold if similarity_threshold is not None else self.similarity_threshold
-        embedding = get_embedding(query)
+        embedding = await get_embedding(query)
         emb_str = str(embedding)
 
         async with pool.acquire() as conn:
@@ -140,7 +140,7 @@ class SemanticCache:
         if not pool:
             return []
 
-        embedding = get_embedding(query)
+        embedding = await get_embedding(query)
         emb_str = str(embedding)
         threshold = min_similarity if min_similarity is not None else self.similarity_threshold
 

@@ -1,5 +1,5 @@
 import json
-import time
+import asyncio
 import uuid
 import httpx
 from fastapi import APIRouter, HTTPException
@@ -550,5 +550,5 @@ async def _poll_message(
                 if text_attachment:
                     result["text"] = text_attachment["text"]["content"]
                 return result
-        time.sleep(interval)
+        await asyncio.sleep(interval)
     return {"status": "TIMEOUT", "message": "Polling timed out"}
