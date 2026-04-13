@@ -21,6 +21,7 @@ import {
   RotateCcw,
   Play,
   Database,
+  Plus,
 } from 'lucide-react'
 import { api } from '../api'
 import type { SavedQuestion, Warehouse, SemanticCacheStats } from '../api'
@@ -300,6 +301,13 @@ export default function GenieChat() {
       await api.saveQuestion({ room_id: roomId, question, sql })
       loadSavedQuestions()
     } catch { /* silent */ }
+  }
+
+  const handleAddSampleQuestion = async (question: string, sql: string) => {
+    if (!roomId) return
+    const updated = [...sampleQueries, { question, sql }]
+    await api.updateGenieRoom(roomId, { sample_queries: updated })
+    setSampleQueries(updated)
   }
 
   const handleDeleteSaved = async (id: string) => {
@@ -756,6 +764,8 @@ export default function GenieChat() {
                           sql={msg.sql || ''}
                           queryResult={msg.queryResult}
                           onSave={handleSaveQuestion}
+                          onAddSample={handleAddSampleQuestion}
+                          isSampleQuestion={sampleQueries.some((sq) => sq.question === msg.userQuestion)}
                         />
                       )}
                     </>
@@ -951,15 +961,19 @@ export default function GenieChat() {
   )
 }
 
-function MessageActions({ question, sql, queryResult, onSave }: {
+function MessageActions({ question, sql, queryResult, onSave, onAddSample, isSampleQuestion }: {
   question: string
   sql: string
   queryResult?: any
   onSave: (question: string, sql: string) => Promise<void>
+  onAddSample: (question: string, sql: string) => Promise<void>
+  isSampleQuestion?: boolean
 }) {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [addingSample, setAddingSample] = useState(false)
+  const [sampleAdded, setSampleAdded] = useState(isSampleQuestion || false)
   const [showChart, setShowChart] = useState(false)
   const [chartType, setChartType] = useState<'bar' | 'line'>('bar')
 
@@ -994,6 +1008,26 @@ function MessageActions({ question, sql, queryResult, onSave }: {
         {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : saved ? <Check className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
         {saved ? 'Saved' : saveError ? 'Retry save' : 'Save question'}
       </button>
+
+      {sql && (
+        <button
+          onClick={async () => {
+            setAddingSample(true)
+            try { await onAddSample(question, sql); setSampleAdded(true) }
+            catch { /* silent */ }
+            finally { setAddingSample(false) }
+          }}
+          disabled={addingSample || sampleAdded}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            sampleAdded
+              ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+              : 'bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[#D0A33C] hover:border-[#D0A33C]/30'
+          }`}
+        >
+          {addingSample ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : sampleAdded ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+          {sampleAdded ? 'Sample added' : 'Add as sample question'}
+        </button>
+      )}
 
       {canVisualize && (
         <button
