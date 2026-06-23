@@ -429,7 +429,9 @@ else:
 # MAGIC %md
 # MAGIC ## Step 4: Grant the Service Principal Access to Lakebase
 # MAGIC
-# MAGIC The app's service principal needs PostgreSQL permissions to read/write tables.
+# MAGIC The app's service principal needs PostgreSQL permissions to **create** its
+# MAGIC tables on first use and to read/write tables + sequences — including any
+# MAGIC created by the deploying user during local dev against this same Lakebase.
 
 # COMMAND ----------
 
@@ -454,9 +456,23 @@ try:
 
     grants = [
         f'GRANT ALL PRIVILEGES ON DATABASE {DATABASE_NAME} TO "{sp_id}"',
+        # USAGE + CREATE so the SP can create its own tables on first use. Without
+        # CREATE on `public`, lazy "CREATE TABLE IF NOT EXISTS" fails with
+        # "permission denied for schema public" and the app then errors with
+        # 'relation "..." does not exist'.
         f'GRANT ALL PRIVILEGES ON SCHEMA public TO "{sp_id}"',
+        # Access to any objects that already exist (e.g. created during local dev
+        # against this same Lakebase). Sequences matter for serial PKs (e.g.
+        # semantic_cache.id) — without them INSERTs fail.
         f'GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "{sp_id}"',
+        f'GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "{sp_id}"',
+        # Future objects created by the SP itself are SP-owned (full access). Also
+        # auto-grant objects created by *this deploying user* so tables made via
+        # local dev stay accessible to the app's service principal.
         f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON TABLES TO "{sp_id}"',
+        f'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON SEQUENCES TO "{sp_id}"',
+        f'ALTER DEFAULT PRIVILEGES FOR ROLE "{username}" IN SCHEMA public GRANT ALL PRIVILEGES ON TABLES TO "{sp_id}"',
+        f'ALTER DEFAULT PRIVILEGES FOR ROLE "{username}" IN SCHEMA public GRANT ALL PRIVILEGES ON SEQUENCES TO "{sp_id}"',
     ]
 
     for sql in grants:
