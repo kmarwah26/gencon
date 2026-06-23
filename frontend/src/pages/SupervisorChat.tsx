@@ -149,7 +149,7 @@ export default function SupervisorChat() {
             <div className="p-4 border-b border-[var(--border)]">
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2">
-                  <Network className="w-4 h-4 text-[#D0A33C]" />
+                  <Network className="w-4 h-4 text-[#6366F1]" />
                   <h3 className="text-sm font-semibold text-[var(--text-primary)]">
                     Select Rooms
                   </h3>
@@ -186,15 +186,15 @@ export default function SupervisorChat() {
                       onClick={() => toggleRoom(room.id)}
                       className={`w-full flex items-start gap-3 p-3 rounded-lg text-left transition-all mb-1 ${
                         isSelected
-                          ? 'bg-[#D0A33C]/10 border border-[#D0A33C]/30'
+                          ? 'bg-[#6366F1]/10 border border-[#6366F1]/30'
                           : 'hover:bg-[var(--bg-hover)] border border-transparent'
                       }`}
                     >
                       <div
                         className={`shrink-0 w-5 h-5 rounded border flex items-center justify-center mt-0.5 transition-all ${
                           isSelected
-                            ? 'bg-[#D0A33C] border-[#D0A33C]'
-                            : 'border-[var(--border)] hover:border-[#D0A33C]'
+                            ? 'bg-[#6366F1] border-[#6366F1]'
+                            : 'border-[var(--border)] hover:border-[#6366F1]'
                         }`}
                       >
                         {isSelected && <Check className="w-3 h-3 text-white" />}
@@ -230,7 +230,7 @@ export default function SupervisorChat() {
                 step={5}
                 value={recursionLimit}
                 onChange={(e) => setRecursionLimit(parseInt(e.target.value))}
-                className="w-full h-1.5 rounded-full appearance-none bg-[var(--bg-tertiary)] accent-[#D0A33C]"
+                className="w-full h-1.5 rounded-full appearance-none bg-[var(--bg-tertiary)] accent-[#6366F1]"
               />
               <div className="flex justify-between mt-1">
                 <span className="text-[9px] text-[var(--text-secondary)]">Faster</span>
@@ -251,9 +251,9 @@ export default function SupervisorChat() {
                       .map((id) => (
                         <div
                           key={id}
-                          className="w-5 h-5 rounded-full bg-[#D0A33C]/20 border-2 border-[var(--bg-tertiary)] flex items-center justify-center"
+                          className="w-5 h-5 rounded-full bg-[#6366F1]/20 border-2 border-[var(--bg-tertiary)] flex items-center justify-center"
                         >
-                          <Sparkles className="w-2.5 h-2.5 text-[#D0A33C]" />
+                          <Sparkles className="w-2.5 h-2.5 text-[#6366F1]" />
                         </div>
                       ))}
                     {selectedRooms.size > 3 && (
@@ -321,7 +321,7 @@ export default function SupervisorChat() {
               <div
                 className={`max-w-[75%] ${
                   msg.role === 'user'
-                    ? 'bg-[#3F1F14] text-white rounded-2xl rounded-br-md px-4 py-2.5'
+                    ? 'bg-[#4338CA] text-white rounded-2xl rounded-br-md px-4 py-2.5'
                     : 'space-y-3'
                 }`}
               >
@@ -367,12 +367,12 @@ export default function SupervisorChat() {
               </div>
               <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-2xl rounded-bl-md px-4 py-3 space-y-2">
                 <div className="flex items-center gap-2 text-sm text-[var(--text-primary)] font-medium">
-                  <Loader2 className="w-4 h-4 animate-spin text-[#D0A33C]" />
+                  <Loader2 className="w-4 h-4 animate-spin text-[#6366F1]" />
                   Analyzing your question...
                 </div>
                 <div className="text-[11px] text-[var(--text-secondary)] space-y-1">
                   <p className="flex items-center gap-1.5">
-                    <Sparkles className="w-3 h-3 text-[#D0A33C] animate-pulse" />
+                    <Sparkles className="w-3 h-3 text-[#6366F1] animate-pulse" />
                     Evaluating {selectedRooms.size} room{selectedRooms.size !== 1 ? 's' : ''} to find the best match
                   </p>
                   <div className="flex flex-wrap gap-1 ml-4">
@@ -410,13 +410,13 @@ export default function SupervisorChat() {
                   : 'Select rooms from the panel first...'
               }
               disabled={loading || !hasSelection}
-              className="flex-1 px-4 py-3 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#D0A33C] transition-colors text-sm disabled:opacity-50"
+              className="flex-1 px-4 py-3 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#6366F1] transition-colors text-sm disabled:opacity-50"
               autoFocus
             />
             <button
               onClick={sendMessage}
               disabled={loading || !input.trim() || !hasSelection}
-              className="p-3 rounded-xl bg-[#D0A33C] hover:bg-[#b88d2e] text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-3 rounded-xl bg-[#6366F1] hover:bg-[#4F46E5] text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             >
               <Send className="w-5 h-5" />
             </button>
@@ -455,7 +455,7 @@ function RoutingFlowChart({
       <div className="p-3 space-y-3">
         {/* Step 1: Question */}
         <div className="flex items-start gap-2.5">
-          <div className="shrink-0 w-6 h-6 rounded-full bg-[#3F1F14] flex items-center justify-center text-[10px] font-bold text-white">1</div>
+          <div className="shrink-0 w-6 h-6 rounded-full bg-[#4338CA] flex items-center justify-center text-[10px] font-bold text-white">1</div>
           <div className="flex-1 min-w-0">
             <p className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-0.5">Question received</p>
             <p className="text-xs text-[var(--text-primary)] leading-snug">&ldquo;{question.length > 120 ? question.slice(0, 119) + '...' : question}&rdquo;</p>
@@ -463,11 +463,11 @@ function RoutingFlowChart({
         </div>
 
         {/* Connector */}
-        <div className="ml-3 border-l-2 border-dashed border-[#D0A33C]/30 h-2" />
+        <div className="ml-3 border-l-2 border-dashed border-[#6366F1]/30 h-2" />
 
         {/* Step 2: Supervisor evaluates all rooms */}
         <div className="flex items-start gap-2.5">
-          <div className="shrink-0 w-6 h-6 rounded-full bg-[#D0A33C] flex items-center justify-center text-[10px] font-bold text-white">2</div>
+          <div className="shrink-0 w-6 h-6 rounded-full bg-[#6366F1] flex items-center justify-center text-[10px] font-bold text-white">2</div>
           <div className="flex-1 min-w-0">
             <p className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-1.5">
               Evaluated {allRooms.length} available room{allRooms.length !== 1 ? 's' : ''}
@@ -480,11 +480,11 @@ function RoutingFlowChart({
                     key={room.id}
                     className={`flex items-start gap-2 px-2.5 py-2 rounded-lg transition-all ${
                       isRouted
-                        ? 'bg-[#D0A33C]/8 border border-[#D0A33C]/20'
+                        ? 'bg-[#6366F1]/8 border border-[#6366F1]/20'
                         : 'bg-[var(--bg-tertiary)]/50 border border-transparent opacity-50'
                     }`}
                   >
-                    <Database className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${isRouted ? 'text-[#D0A33C]' : 'text-[var(--text-secondary)]'}`} />
+                    <Database className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${isRouted ? 'text-[#6366F1]' : 'text-[var(--text-secondary)]'}`} />
                     <div className="min-w-0 flex-1">
                       <p className={`text-[11px] font-medium ${isRouted ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}>
                         {room.title}
@@ -496,7 +496,7 @@ function RoutingFlowChart({
                       )}
                     </div>
                     {isRouted && (
-                      <span className="shrink-0 text-[9px] font-semibold text-[#D0A33C] bg-[#D0A33C]/15 px-1.5 py-0.5 rounded uppercase tracking-wider">
+                      <span className="shrink-0 text-[9px] font-semibold text-[#6366F1] bg-[#6366F1]/15 px-1.5 py-0.5 rounded uppercase tracking-wider">
                         Match
                       </span>
                     )}
@@ -508,7 +508,7 @@ function RoutingFlowChart({
         </div>
 
         {/* Connector */}
-        <div className="ml-3 border-l-2 border-dashed border-[#D0A33C]/30 h-2" />
+        <div className="ml-3 border-l-2 border-dashed border-[#6366F1]/30 h-2" />
 
         {/* Step 3: Routing reasoning */}
         {routingReasoning && (
@@ -524,7 +524,7 @@ function RoutingFlowChart({
                 </div>
               </div>
             </div>
-            <div className="ml-3 border-l-2 border-dashed border-[#D0A33C]/30 h-2" />
+            <div className="ml-3 border-l-2 border-dashed border-[#6366F1]/30 h-2" />
           </>
         )}
 
@@ -546,7 +546,7 @@ function RoutingFlowChart({
                       ? 'bg-emerald-500/15 text-emerald-700 border border-emerald-500/30'
                       : r.status === 'FAILED'
                         ? 'bg-red-500/10 text-red-600 border border-red-500/20'
-                        : 'bg-[#D0A33C]/10 text-[#D0A33C] border border-[#D0A33C]/30'
+                        : 'bg-[#6366F1]/10 text-[#6366F1] border border-[#6366F1]/30'
                   }`}
                 >
                   {r.status === 'COMPLETED' ? <Check className="w-3 h-3" /> : <Loader2 className="w-3 h-3" />}
@@ -607,7 +607,7 @@ function RoutingDetails({ results }: { results: RoomResult[] }) {
           {results.map((r) => (
             <div key={r.room_id} className="px-4 py-3">
               <div className="flex items-center gap-2 mb-1">
-                <Sparkles className="w-3.5 h-3.5 text-[#D0A33C]" />
+                <Sparkles className="w-3.5 h-3.5 text-[#6366F1]" />
                 <span className="text-sm font-medium text-[var(--text-primary)]">
                   {r.room_title}
                 </span>
@@ -662,7 +662,7 @@ function SqlBlock({ sql }: { sql: string }) {
         )}
       </button>
       {open && (
-        <pre className="px-4 py-3 bg-[var(--bg-tertiary)] text-sm text-[#325B6D] overflow-x-auto font-mono">
+        <pre className="px-4 py-3 bg-[var(--bg-tertiary)] text-sm text-[#3B82F6] overflow-x-auto font-mono">
           {sql}
         </pre>
       )}

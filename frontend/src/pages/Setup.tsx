@@ -145,7 +145,7 @@ export default function Setup() {
             <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] overflow-hidden">
               <div className="px-4 py-3 bg-[var(--bg-tertiary)] border-b border-[var(--border)] flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Database className="w-4 h-4 text-[#D0A33C]" />
+                  <Database className="w-4 h-4 text-[#6366F1]" />
                   <span className="text-sm font-semibold text-[var(--text-primary)]">Cache Management</span>
                 </div>
                 <button onClick={checkCache} disabled={cacheLoading}
@@ -186,7 +186,7 @@ export default function Setup() {
 function StepHeader({ num, title }: { num: number; title: string }) {
   return (
     <div className="flex items-center gap-3 mb-3">
-      <div className="w-7 h-7 rounded-full bg-[#D0A33C] flex items-center justify-center shrink-0">
+      <div className="w-7 h-7 rounded-full bg-[#6366F1] flex items-center justify-center shrink-0">
         <span className="text-xs font-bold text-white">{num}</span>
       </div>
       <h3 className="text-base font-semibold text-[var(--text-primary)]">{title}</h3>
@@ -201,7 +201,7 @@ function ActionButton({ label, loading, result, onClick }: {
   return (
     <div>
       <button onClick={onClick} disabled={loading}
-        className="w-full px-3 py-2 rounded-md bg-[#D0A33C]/10 text-[#D0A33C] text-xs font-medium hover:bg-[#D0A33C]/20 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5">
+        className="w-full px-3 py-2 rounded-md bg-[#6366F1]/10 text-[#6366F1] text-xs font-medium hover:bg-[#6366F1]/20 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5">
         {loading && <Loader2 className="w-3 h-3 animate-spin" />}
         {label}
       </button>

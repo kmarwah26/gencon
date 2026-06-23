@@ -383,7 +383,7 @@ export default function GenieChat() {
               <h2 className="text-sm font-semibold text-[var(--text-primary)] truncate">{roomTitle}</h2>
               <p className="text-[10px] text-[var(--text-secondary)]">AI/BI Genie</p>
             </div>
-            <div className="w-7 h-7 rounded-md bg-gradient-to-br from-[#D0A33C] to-[#3F1F14] flex items-center justify-center shrink-0">
+            <div className="w-7 h-7 rounded-md bg-gradient-to-br from-[#6366F1] to-[#4338CA] flex items-center justify-center shrink-0">
               <Sparkles className="w-3.5 h-3.5 text-white" />
             </div>
           </div>
@@ -418,7 +418,7 @@ export default function GenieChat() {
                       <div
                         key={wh.id}
                         className={`flex items-center gap-2 px-3 py-2 hover:bg-[var(--bg-hover)] transition-colors ${
-                          wh.id === warehouseId ? 'bg-[#D0A33C]/10' : ''
+                          wh.id === warehouseId ? 'bg-[#6366F1]/10' : ''
                         }`}
                       >
                         <button
@@ -434,7 +434,7 @@ export default function GenieChat() {
                               {isStarting ? 'Starting...' : wh.state} &middot; {wh.cluster_size}
                             </p>
                           </div>
-                          {wh.id === warehouseId && <Check className="w-3.5 h-3.5 text-[#D0A33C] shrink-0" />}
+                          {wh.id === warehouseId && <Check className="w-3.5 h-3.5 text-[#6366F1] shrink-0" />}
                         </button>
                         {(isStopped && !isStarting) && (
                           <button
@@ -470,7 +470,7 @@ export default function GenieChat() {
           <div className="mb-3">
             <div className="flex items-center justify-between mb-1.5">
               <p className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles className="w-3 h-3 text-[#325B6D]" /> Example questions
+                <Sparkles className="w-3 h-3 text-[#3B82F6]" /> Example questions
               </p>
               {suggestedQsLoading && <Loader2 className="w-3 h-3 animate-spin text-[var(--text-secondary)]" />}
             </div>
@@ -489,10 +489,10 @@ export default function GenieChat() {
                     key={i}
                     onClick={() => sendMessage(sq.title)}
                     disabled={loading || (filterScope?.has_columns === true && filterScope?.blocked === true)}
-                    className="w-full text-left px-2 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border)] hover:border-[#325B6D]/40 hover:bg-[#325B6D]/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed group"
+                    className="w-full text-left px-2 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border)] hover:border-[#3B82F6]/40 hover:bg-[#3B82F6]/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed group"
                     title={sq.hint}
                   >
-                    <p className="text-[11px] text-[var(--text-primary)] leading-snug line-clamp-2 group-hover:text-[#325B6D]">{sq.title}</p>
+                    <p className="text-[11px] text-[var(--text-primary)] leading-snug line-clamp-2 group-hover:text-[#3B82F6]">{sq.title}</p>
                   </button>
                 ))}
               </div>
@@ -548,13 +548,13 @@ export default function GenieChat() {
                 </div>
               ) : (
                 savedQuestions.map((sq) => (
-                  <div key={sq.id} className="group rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] hover:border-[#D0A33C]/30 transition-colors">
+                  <div key={sq.id} className="group rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] hover:border-[#6366F1]/30 transition-colors">
                     <button
                       onClick={() => sendMessage(sq.question)}
                       className="w-full text-left p-3"
                     >
                       <p className="text-xs font-medium text-[var(--text-primary)] leading-snug mb-1 line-clamp-2">{sq.question}</p>
-                      <p className="text-[10px] font-mono text-[#D0A33C]/70 truncate">{sq.sql.slice(0, 60)}...</p>
+                      <p className="text-[10px] font-mono text-[#6366F1]/70 truncate">{sq.sql.slice(0, 60)}...</p>
                     </button>
                     <div className="px-3 pb-2 flex items-center justify-between">
                       <span className="text-[9px] text-[var(--text-secondary)]">
@@ -605,19 +605,19 @@ export default function GenieChat() {
                     value={newDashName}
                     onChange={(e) => setNewDashName(e.target.value)}
                     placeholder="Optional name"
-                    className="flex-1 px-2 py-1.5 rounded bg-[var(--bg-tertiary)] border border-[var(--border)] text-[11px] focus:outline-none focus:border-[#D0A33C]"
+                    className="flex-1 px-2 py-1.5 rounded bg-[var(--bg-tertiary)] border border-[var(--border)] text-[11px] focus:outline-none focus:border-[#6366F1]"
                   />
                   <button
                     onClick={handleNewDashboard}
                     disabled={creatingDash}
-                    className="px-2.5 py-1.5 rounded bg-[#D0A33C] hover:bg-[#b88d2e] text-white text-[11px] font-medium disabled:opacity-50 flex items-center gap-1"
+                    className="px-2.5 py-1.5 rounded bg-[#6366F1] hover:bg-[#4F46E5] text-white text-[11px] font-medium disabled:opacity-50 flex items-center gap-1"
                   >
                     {creatingDash ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
                     Create
                   </button>
                 </div>
                 <p className="text-[10px] text-[var(--text-secondary)] mt-1.5">
-                  "Save to dashboard" always targets the <span className="text-[#D0A33C] font-semibold">default</span>.
+                  "Save to dashboard" always targets the <span className="text-[#6366F1] font-semibold">default</span>.
                 </p>
               </div>
 
@@ -630,13 +630,13 @@ export default function GenieChat() {
               ) : (
                 <div className="space-y-2">
                   {dashboards.map((d) => (
-                    <div key={d.id} className={`rounded-lg border p-3 ${d.is_default ? 'border-[#D0A33C]/40 bg-[#D0A33C]/5' : 'border-[var(--border)] bg-[var(--bg-primary)]'}`}>
+                    <div key={d.id} className={`rounded-lg border p-3 ${d.is_default ? 'border-[#6366F1]/40 bg-[#6366F1]/5' : 'border-[var(--border)] bg-[var(--bg-primary)]'}`}>
                       <div className="flex items-start gap-2 mb-2">
-                        <LayoutDashboard className="w-3.5 h-3.5 text-[#D0A33C] shrink-0 mt-0.5" />
+                        <LayoutDashboard className="w-3.5 h-3.5 text-[#6366F1] shrink-0 mt-0.5" />
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-semibold text-[var(--text-primary)] truncate">{d.name}</p>
                           {d.is_default && (
-                            <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#D0A33C] text-white">DEFAULT</span>
+                            <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#6366F1] text-white">DEFAULT</span>
                           )}
                         </div>
                       </div>
@@ -658,7 +658,7 @@ export default function GenieChat() {
                         {!d.is_default && (
                           <button
                             onClick={() => handleSetDefault(d.id)}
-                            className="px-2 py-1.5 rounded bg-[var(--bg-tertiary)] hover:bg-[#D0A33C]/20 text-[#D0A33C] text-[10px] font-medium"
+                            className="px-2 py-1.5 rounded bg-[var(--bg-tertiary)] hover:bg-[#6366F1]/20 text-[#6366F1] text-[10px] font-medium"
                             title="Set as default"
                           >
                             ★
@@ -691,13 +691,13 @@ export default function GenieChat() {
                 onClick={() => setMainView(t.id)}
                 className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
                   active
-                    ? 'border-[#D0A33C] text-[var(--text-primary)]'
+                    ? 'border-[#6366F1] text-[var(--text-primary)]'
                     : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" /> {t.label}
                 {t.id === 'dashboard' && dashboards.length > 0 && (
-                  <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-[#D0A33C]/15 text-[#D0A33C]">{dashboards.length}</span>
+                  <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-[#6366F1]/15 text-[#6366F1]">{dashboards.length}</span>
                 )}
               </button>
             )
@@ -718,9 +718,9 @@ export default function GenieChat() {
               </div>
             </div>
           ) : (
-            <div className="shrink-0 px-5 py-2 bg-[#D0A33C]/10 border-b border-[#D0A33C]/20 flex items-center gap-2 flex-wrap">
-              <Lock className="w-3.5 h-3.5 text-[#D0A33C] shrink-0" />
-              <span className="text-[11px] font-semibold text-[#D0A33C]">Filter scope</span>
+            <div className="shrink-0 px-5 py-2 bg-[#6366F1]/10 border-b border-[#6366F1]/20 flex items-center gap-2 flex-wrap">
+              <Lock className="w-3.5 h-3.5 text-[#6366F1] shrink-0" />
+              <span className="text-[11px] font-semibold text-[#6366F1]">Filter scope</span>
               {filterScope.columns.map((c) => {
                 const vals = filterScope.values[c.column_name] || []
                 return (
@@ -751,10 +751,10 @@ export default function GenieChat() {
                           key={i}
                           onClick={() => sendMessage(sq.question)}
                           disabled={loading}
-                          className="w-full text-left px-4 py-3 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] hover:border-[#D0A33C]/40 hover:bg-[#D0A33C]/5 transition-all group"
+                          className="w-full text-left px-4 py-3 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] hover:border-[#6366F1]/40 hover:bg-[#6366F1]/5 transition-all group"
                         >
                           <div className="flex items-start gap-3">
-                            <MessageSquare className="w-4 h-4 text-[#D0A33C] shrink-0 mt-0.5 opacity-60 group-hover:opacity-100 transition-opacity" />
+                            <MessageSquare className="w-4 h-4 text-[#6366F1] shrink-0 mt-0.5 opacity-60 group-hover:opacity-100 transition-opacity" />
                             <span className="text-sm text-[var(--text-primary)]">{sq.question}</span>
                           </div>
                         </button>
@@ -766,7 +766,7 @@ export default function GenieChat() {
                     {(suggestedQs.length > 0 || suggestedQsLoading) && (
                       <div className="w-full max-w-lg mb-5">
                         <div className="flex items-center gap-1.5 mb-2">
-                          <Sparkles className="w-3 h-3 text-[#325B6D]" />
+                          <Sparkles className="w-3 h-3 text-[#3B82F6]" />
                           <p className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Suggested for this room</p>
                           {suggestedQsLoading && <Loader2 className="w-3 h-3 animate-spin text-[var(--text-secondary)]" />}
                         </div>
@@ -783,7 +783,7 @@ export default function GenieChat() {
                                 key={i}
                                 onClick={() => sendMessage(sq.title)}
                                 disabled={loading}
-                                className="text-left px-3 py-2.5 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] hover:border-[#325B6D]/50 hover:bg-[#325B6D]/5 transition-all group"
+                                className="text-left px-3 py-2.5 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] hover:border-[#3B82F6]/50 hover:bg-[#3B82F6]/5 transition-all group"
                               >
                                 <p className="text-xs text-[var(--text-primary)] leading-snug mb-1 line-clamp-2">{sq.title}</p>
                                 {sq.hint && (
@@ -805,10 +805,10 @@ export default function GenieChat() {
                             key={sq.id}
                             onClick={() => sendMessage(sq.question)}
                             disabled={loading}
-                            className="w-full text-left px-4 py-3 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] hover:border-[#D0A33C]/40 hover:bg-[#D0A33C]/5 transition-all group"
+                            className="w-full text-left px-4 py-3 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] hover:border-[#6366F1]/40 hover:bg-[#6366F1]/5 transition-all group"
                           >
                             <div className="flex items-start gap-3">
-                              <Bookmark className="w-4 h-4 text-[#D0A33C] shrink-0 mt-0.5 opacity-60 group-hover:opacity-100 transition-opacity" />
+                              <Bookmark className="w-4 h-4 text-[#6366F1] shrink-0 mt-0.5 opacity-60 group-hover:opacity-100 transition-opacity" />
                               <span className="text-sm text-[var(--text-primary)]">{sq.question}</span>
                             </div>
                           </button>
@@ -821,14 +821,14 @@ export default function GenieChat() {
             {messages.map((msg, i) => (
               <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}>
                 {msg.role === 'assistant' && (
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#D0A33C] to-[#3F1F14] flex items-center justify-center shrink-0 mt-0.5">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#6366F1] to-[#4338CA] flex items-center justify-center shrink-0 mt-0.5">
                     <Sparkles className="w-4 h-4 text-white" />
                   </div>
                 )}
                 <div
                   className={`max-w-[85%] ${
                     msg.role === 'user'
-                      ? 'bg-[#3F1F14] text-white rounded-2xl rounded-br-md px-4 py-2.5'
+                      ? 'bg-[#4338CA] text-white rounded-2xl rounded-br-md px-4 py-2.5'
                       : 'space-y-3'
                   }`}
                 >
@@ -864,7 +864,7 @@ export default function GenieChat() {
             ))}
             {loading && (
               <div className="flex gap-3">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#D0A33C] to-[#3F1F14] flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#6366F1] to-[#4338CA] flex items-center justify-center shrink-0">
                   <Sparkles className="w-4 h-4 text-white" />
                 </div>
                 <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-2xl rounded-bl-md px-4 py-3">
@@ -913,13 +913,13 @@ export default function GenieChat() {
                   : 'Ask a question about your data...'
               }
               disabled={loading || (filterScope?.has_columns === true && filterScope?.blocked === true)}
-              className="flex-1 px-4 py-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#D0A33C] transition-colors text-sm disabled:opacity-50"
+              className="flex-1 px-4 py-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#6366F1] transition-colors text-sm disabled:opacity-50"
               autoFocus
             />
             <button
               onClick={() => sendMessage()}
               disabled={loading || !input.trim() || (filterScope?.has_columns === true && filterScope?.blocked === true)}
-              className="p-3 rounded-xl bg-[#D0A33C] hover:bg-[#b88d2e] text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              className="p-3 rounded-xl bg-[#6366F1] hover:bg-[#4F46E5] text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             >
               <Send className="w-5 h-5" />
             </button>
@@ -940,12 +940,12 @@ export default function GenieChat() {
                     value={newDashName}
                     onChange={(e) => setNewDashName(e.target.value)}
                     placeholder="Optional name"
-                    className="flex-1 px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#D0A33C]"
+                    className="flex-1 px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#6366F1]"
                   />
                   <button
                     onClick={handleNewDashboard}
                     disabled={creatingDash}
-                    className="px-4 py-2 rounded-lg bg-[#D0A33C] hover:bg-[#b88d2e] text-white text-sm font-medium disabled:opacity-50 flex items-center gap-1.5"
+                    className="px-4 py-2 rounded-lg bg-[#6366F1] hover:bg-[#4F46E5] text-white text-sm font-medium disabled:opacity-50 flex items-center gap-1.5"
                   >
                     {creatingDash ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Create
                   </button>
@@ -955,11 +955,11 @@ export default function GenieChat() {
               <>
                 {/* Dashboard toolbar: selector + open-in-Databricks */}
                 <div className="shrink-0 flex items-center gap-2 px-5 py-2.5 border-b border-[var(--border)] bg-[var(--bg-secondary)]">
-                  <LayoutDashboard className="w-4 h-4 text-[#D0A33C] shrink-0" />
+                  <LayoutDashboard className="w-4 h-4 text-[#6366F1] shrink-0" />
                   <select
                     value={embedDashId}
                     onChange={(e) => setEmbedDashId(e.target.value)}
-                    className="min-w-0 max-w-xs px-2 py-1.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#D0A33C]"
+                    className="min-w-0 max-w-xs px-2 py-1.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#6366F1]"
                   >
                     {dashboards.map((d) => (
                       <option key={d.id} value={d.dashboard_id}>{d.name}{d.is_default ? ' (default)' : ''}</option>
@@ -1009,7 +1009,7 @@ export default function GenieChat() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
             <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
               <div className="flex items-center gap-2 mb-1">
-                <Share2 className="w-5 h-5 text-[#D0A33C]" />
+                <Share2 className="w-5 h-5 text-[#6366F1]" />
                 <h3 className="text-lg font-semibold text-[var(--text-primary)]">Share dashboard</h3>
               </div>
               <p className="text-xs text-[var(--text-secondary)] mb-4">
@@ -1021,7 +1021,7 @@ export default function GenieChat() {
                 onChange={(e) => setShareEmails(e.target.value)}
                 placeholder="alice@databricks.com, bob@databricks.com"
                 rows={3}
-                className="w-full px-3 py-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#D0A33C] resize-none mb-2"
+                className="w-full px-3 py-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#6366F1] resize-none mb-2"
               />
               {shareMsg && (
                 <p className={`text-xs mb-2 ${shareMsg.toLowerCase().includes('shared') ? 'text-emerald-500' : 'text-red-500'}`}>{shareMsg}</p>
@@ -1037,7 +1037,7 @@ export default function GenieChat() {
                 <button
                   onClick={handleShare}
                   disabled={sharing || !shareEmails.trim()}
-                  className="flex-1 py-2.5 rounded-lg bg-[#D0A33C] hover:bg-[#b88d2e] text-white font-semibold text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="flex-1 py-2.5 rounded-lg bg-[#6366F1] hover:bg-[#4F46E5] text-white font-semibold text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {sharing ? <><Loader2 className="w-4 h-4 animate-spin" /> Sharing...</> : <><Share2 className="w-4 h-4" /> Share</>}
                 </button>
@@ -1105,7 +1105,7 @@ function MessageActions({ question, sql, queryResult, onSave, onAddSample, onSav
             ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
             : saveError
               ? 'bg-red-500/10 text-red-500 border border-red-500/20'
-              : 'bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[#D0A33C] hover:border-[#D0A33C]/30'
+              : 'bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[#6366F1] hover:border-[#6366F1]/30'
         }`}
       >
         {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : saved ? <Check className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
@@ -1124,7 +1124,7 @@ function MessageActions({ question, sql, queryResult, onSave, onAddSample, onSav
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
             sampleAdded
               ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
-              : 'bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[#D0A33C] hover:border-[#D0A33C]/30'
+              : 'bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[#6366F1] hover:border-[#6366F1]/30'
           }`}
         >
           {addingSample ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : sampleAdded ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
@@ -1157,7 +1157,7 @@ function MessageActions({ question, sql, queryResult, onSave, onAddSample, onSav
                 ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
                 : dashError
                   ? 'bg-red-500/10 text-red-500 border border-red-500/20'
-                  : 'bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[#D0A33C] hover:border-[#D0A33C]/30'
+                  : 'bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[#6366F1] hover:border-[#6366F1]/30'
             }`}
             title={dashError || (dashSaved ? `Saved to dashboard (${dashSaved.created ? 'created' : 'appended'})` : 'Save this query as a widget on the room dashboard')}
           >
@@ -1179,8 +1179,8 @@ function MessageActions({ question, sql, queryResult, onSave, onAddSample, onSav
           onClick={() => setShowChart(!showChart)}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
             showChart
-              ? 'bg-[#325B6D]/10 text-[#325B6D] border border-[#325B6D]/20'
-              : 'bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[#325B6D] hover:border-[#325B6D]/30'
+              ? 'bg-[#3B82F6]/10 text-[#3B82F6] border border-[#3B82F6]/20'
+              : 'bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[#3B82F6] hover:border-[#3B82F6]/30'
           }`}
         >
           <BarChart3 className="w-3.5 h-3.5" />
@@ -1218,7 +1218,7 @@ function shortNum(n: number): string {
 
 type ChartType = 'barV' | 'barH' | 'line' | 'area' | 'pie' | 'scatter' | 'stacked'
 
-const PALETTE = ['#D0A33C', '#325B6D', '#921A28', '#959B7A', '#D69E77', '#E3BC21', '#3F1F14', '#5A8A9F']
+const PALETTE = ['#6366F1', '#3B82F6', '#EC4899', '#22D3EE', '#F472B6', '#A855F7', '#4338CA', '#60A5FA']
 
 const CHART_TYPE_META: { id: ChartType; label: string }[] = [
   { id: 'barV', label: 'Bar' },
@@ -1281,7 +1281,7 @@ function VisualizationPanel({ columns, types, rows, chartType, setChartType, act
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <BarChart3 className="w-4 h-4 text-[#325B6D] shrink-0" />
+          <BarChart3 className="w-4 h-4 text-[#3B82F6] shrink-0" />
           <div className="min-w-0">
             <p className="text-[11px] font-semibold text-[var(--text-primary)] uppercase tracking-wider truncate">
               {seriesNames.length > 1 ? `${seriesNames.length} series` : seriesNames[0]}
@@ -1299,7 +1299,7 @@ function VisualizationPanel({ columns, types, rows, chartType, setChartType, act
             onClick={() => setChartType(c.id)}
             className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
               effectiveType === c.id
-                ? 'bg-[#325B6D] text-white'
+                ? 'bg-[#3B82F6] text-white'
                 : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
             }`}
           >
@@ -1612,7 +1612,7 @@ function SqlBlock({ sql }: { sql: string }) {
         {open ? <ChevronDown className="w-3.5 h-3.5 ml-auto" /> : <ChevronRight className="w-3.5 h-3.5 ml-auto" />}
       </button>
       {open && (
-        <pre className="px-4 py-3 bg-[var(--bg-tertiary)] text-sm text-[#325B6D] overflow-x-auto font-mono">
+        <pre className="px-4 py-3 bg-[var(--bg-tertiary)] text-sm text-[#3B82F6] overflow-x-auto font-mono">
           {sql}
         </pre>
       )}

@@ -16,12 +16,12 @@ import SupervisorChat from './pages/SupervisorChat'
 import Services from './pages/Services'
 import SampleDataGenerator from './pages/SampleDataGenerator'
 const tiles = [
-  { to: '/catalog', icon: Database, label: 'Explore Data', desc: 'See the customer and campaign data available to your team', color: 'from-[#325B6D] to-[#3F1F14]' },
+  { to: '/catalog', icon: Database, label: 'Explore Data', desc: 'See the customer and campaign data available to your team', color: 'from-[#3B82F6] to-[#4338CA]' },
   { to: '/sample-data', icon: FlaskConical, label: 'Demo Datasets', desc: 'Spin up realistic sample data for demos and trials', color: 'from-violet-500 to-fuchsia-600' },
-  { to: '/create', icon: Plus, label: 'New Assistant', desc: 'Set up an AI assistant for a new dataset', color: 'from-[#D0A33C] to-[#E3BC21]' },
-  { to: '/rooms', icon: MessageSquare, label: 'Ask Questions', desc: 'Chat with your data and get instant answers', color: 'from-[#959B7A] to-[#325B6D]' },
-  { to: '/edit', icon: Pencil, label: 'Manage Assistants', desc: 'Update and fine-tune your assistants', color: 'from-[#D69E77] to-[#E98475]' },
-  { to: '/supervisor', icon: Network, label: 'Ask Everything', desc: 'One question, answered across all your data', color: 'from-[#921A28] to-[#3F1F14]' },
+  { to: '/create', icon: Plus, label: 'New Assistant', desc: 'Set up an AI assistant for a new dataset', color: 'from-[#6366F1] to-[#A855F7]' },
+  { to: '/rooms', icon: MessageSquare, label: 'Ask Questions', desc: 'Chat with your data and get instant answers', color: 'from-[#22D3EE] to-[#3B82F6]' },
+  { to: '/edit', icon: Pencil, label: 'Manage Assistants', desc: 'Update and fine-tune your assistants', color: 'from-[#F472B6] to-[#FB7185]' },
+  { to: '/supervisor', icon: Network, label: 'Ask Everything', desc: 'One question, answered across all your data', color: 'from-[#EC4899] to-[#4338CA]' },
 ]
 
 export default function App() {
@@ -44,7 +44,7 @@ export default function App() {
       {/* Top bar */}
       <header className="shrink-0 h-14 bg-[var(--bg-secondary)] border-b border-[var(--border)] flex items-center px-5 gap-4">
         <Link to="/" className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#D0A33C] to-[#3F1F14] flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#6366F1] to-[#4338CA] flex items-center justify-center">
             <Sparkles className="w-4 h-4 text-white" />
           </div>
           <h1 className="text-base font-bold tracking-tight text-[var(--text-primary)]">Genie-Force</h1>
@@ -53,7 +53,7 @@ export default function App() {
 
         <div className="ml-auto flex items-center gap-3">
           <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-[var(--bg-tertiary)]">
-            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#D0A33C] to-[#3F1F14] flex items-center justify-center">
+            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#6366F1] to-[#4338CA] flex items-center justify-center">
               {user ? (
                 <span className="text-[9px] font-bold text-white">{initials}</span>
               ) : (
@@ -112,7 +112,7 @@ function Home({ user }: { user: CurrentUser | null }) {
     <div className="max-w-6xl mx-auto px-8 py-12">
       {/* Hero */}
       <div className="mb-10">
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#D0A33C]/10 text-[#D0A33C] text-xs font-semibold mb-4">
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#6366F1]/10 text-[#6366F1] text-xs font-semibold mb-4">
           <Sparkles className="w-3.5 h-3.5" /> Your data, in plain language
         </span>
         <h2 className="text-4xl font-bold text-[var(--text-primary)] mb-3 tracking-tight">
@@ -125,7 +125,7 @@ function Home({ user }: { user: CurrentUser | null }) {
         <div className="flex flex-wrap gap-3 mt-6">
           <button
             onClick={() => navigate('/rooms')}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#D0A33C] hover:bg-[#b88d2e] text-white text-sm font-semibold transition-colors"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#6366F1] hover:bg-[#4F46E5] text-white text-sm font-semibold transition-colors"
           >
             <MessageSquare className="w-4 h-4" /> Ask a question <ArrowRight className="w-4 h-4" />
           </button>
@@ -142,8 +142,8 @@ function Home({ user }: { user: CurrentUser | null }) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
         {highlights.map((h) => (
           <div key={h.title} className="p-5 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)]">
-            <div className="w-10 h-10 rounded-lg bg-[#D0A33C]/10 flex items-center justify-center mb-3">
-              <h.icon className="w-5 h-5 text-[#D0A33C]" />
+            <div className="w-10 h-10 rounded-lg bg-[#6366F1]/10 flex items-center justify-center mb-3">
+              <h.icon className="w-5 h-5 text-[#6366F1]" />
             </div>
             <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-1">{h.title}</h3>
             <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{h.desc}</p>
@@ -222,7 +222,7 @@ function EditRoomPicker() {
           <p className="text-lg mb-2">No Genie Rooms yet</p>
           <p className="text-sm mb-6">Create your first room to get started</p>
           <button onClick={() => navigate('/create')}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#D0A33C] hover:bg-[#b88d2e] text-white text-sm font-medium transition-colors">
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#6366F1] hover:bg-[#4F46E5] text-white text-sm font-medium transition-colors">
             Create Room
           </button>
         </div>

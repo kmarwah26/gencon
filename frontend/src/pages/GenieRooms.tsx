@@ -45,7 +45,7 @@ export default function GenieRooms() {
     <div className="px-12 py-8">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#D0A33C] to-[#3F1F14] flex items-center justify-center">
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#6366F1] to-[#4338CA] flex items-center justify-center">
             <MessageSquare className="w-5 h-5 text-white" />
           </div>
           <div>
@@ -68,7 +68,7 @@ export default function GenieRooms() {
           )}
           <button
             onClick={() => navigate('/create')}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#D0A33C] hover:bg-[#b88d2e] text-white text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#6366F1] hover:bg-[#4F46E5] text-white text-sm font-medium transition-colors"
           >
             <Plus className="w-4 h-4" /> New Room
           </button>
@@ -84,7 +84,7 @@ export default function GenieRooms() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search rooms..."
-            className="w-full pl-9 pr-4 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#D0A33C]/50"
+            className="w-full pl-9 pr-4 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#6366F1]/50"
           />
         </div>
       )}
@@ -108,7 +108,7 @@ export default function GenieRooms() {
           <p className="text-sm mb-6">Create your first room to start asking questions about your data</p>
           <button
             onClick={() => navigate('/create')}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#D0A33C] hover:bg-[#b88d2e] text-white text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#6366F1] hover:bg-[#4F46E5] text-white text-sm font-medium transition-colors"
           >
             <Plus className="w-4 h-4" /> Create Room
           </button>
@@ -128,10 +128,10 @@ export default function GenieRooms() {
           <button
             key={room.id}
             onClick={() => navigate(`/rooms/${room.id}`)}
-            className="flex items-center gap-4 p-5 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] hover:border-[#D0A33C]/40 hover:bg-[var(--bg-tertiary)] transition-all text-left group"
+            className="flex items-center gap-4 p-5 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] hover:border-[#6366F1]/40 hover:bg-[var(--bg-tertiary)] transition-all text-left group"
           >
-            <div className="w-11 h-11 rounded-lg bg-[#D0A33C]/15 flex items-center justify-center shrink-0">
-              <Sparkles className="w-5 h-5 text-[#D0A33C]" />
+            <div className="w-11 h-11 rounded-lg bg-[#6366F1]/15 flex items-center justify-center shrink-0">
+              <Sparkles className="w-5 h-5 text-[#6366F1]" />
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-base font-semibold text-[var(--text-primary)] truncate">
@@ -146,7 +146,7 @@ export default function GenieRooms() {
               title="Edit room">
               <Pencil className="w-3.5 h-3.5" />
             </button>
-            <ArrowRight className="w-5 h-5 text-[var(--text-secondary)] group-hover:text-[#D0A33C] transition-colors shrink-0" />
+            <ArrowRight className="w-5 h-5 text-[var(--text-secondary)] group-hover:text-[#6366F1] transition-colors shrink-0" />
           </button>
         ))}
       </div>

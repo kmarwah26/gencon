@@ -1,19 +1,21 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Plus, X, Loader2, Sparkles, Warehouse, Search,
+  Plus, Minus, X, Loader2, Sparkles, Warehouse, Search,
   ChevronRight, ChevronDown, Database, Layers, Table2, Check,
   AlertTriangle, CheckCircle2, FileText, BarChart3, ArrowRight, ArrowLeft,
   Pencil, Save, Code, Trash2, Wand2, Clock, Hash, MessageSquarePlus, SkipForward,
-  Upload, FolderOpen, Folder,
+  Upload, FolderOpen, Folder, Lock, Users as UsersIcon,
 } from 'lucide-react'
 import { api } from '../api'
 import type {
   Warehouse as WarehouseType, Catalog, Schema, Table,
   CatalogSearchResult, DescriptionValidation,
   SummaryStatsResult, TimeRangesResult, WorkspaceItem,
+  AvailableColumn, Principal,
 } from '../api'
 import { useAppStore } from '../store'
+import { PrincipalPicker } from './EditRoom'
 
 const STEPS = [
   { num: 1, label: 'Setup', icon: Database },
@@ -29,7 +31,7 @@ interface SampleQuery {
 }
 
 export default function CreateRoom() {
-  const { selectedTables, toggleTable, removeTable, clearTables } = useAppStore()
+  const { selectedTables, toggleTable, removeTable, clearTables, addTables, removeTables } = useAppStore()
   const [step, setStep] = useState(1)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -43,6 +45,13 @@ export default function CreateRoom() {
   const [descValidation, setDescValidation] = useState<DescriptionValidation | null>(null)
   const [validating, setValidating] = useState(false)
   const [generatingDesc, setGeneratingDesc] = useState(false)
+  // Bulk metadata generation across all selected tables
+  const [bulkGen, setBulkGen] = useState<Record<string, { table_description: string; columns: Record<string, string> }>>({})
+  const [bulkGenLoading, setBulkGenLoading] = useState(false)
+  const [bulkGenProgress, setBulkGenProgress] = useState('')
+  const [bulkSaveLoading, setBulkSaveLoading] = useState(false)
+  const [bulkSaveProgress, setBulkSaveProgress] = useState('')
+  const [bulkError, setBulkError] = useState('')
 
   // Step 3 — optional analysis
   const [statsResult, setStatsResult] = useState<SummaryStatsResult | null>(null)
@@ -55,6 +64,19 @@ export default function CreateRoom() {
   // Step 4 - SQL Instructions
   const [sampleQueries, setSampleQueries] = useState<SampleQuery[]>([])
   const [instructions, setInstructions] = useState('')
+
+  // Step 5 - Filter config (saved to new room after creation)
+  const [filterColumns, setFilterColumns] = useState<{ column_name: string; label?: string }[]>([])
+  const [filterUsers, setFilterUsers] = useState<{
+    user_email: string
+    principal_type: 'user' | 'group'
+    display_name: string
+    values: Record<string, string[]>
+  }[]>([])
+  const [newFilterCol, setNewFilterCol] = useState('')
+  const [newFilterColLabel, setNewFilterColLabel] = useState('')
+  const [availableFilterCols, setAvailableFilterCols] = useState<AvailableColumn[]>([])
+  const [availableColsLoading, setAvailableColsLoading] = useState(false)
 
   // Picker state
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -128,6 +150,29 @@ export default function CreateRoom() {
     }
   }
 
+  const selectAllInSchema = async (catalog: string, schema: string) => {
+    const key = `${catalog}.${schema}`
+    let schemaTables = tables[key]
+    if (!schemaTables) {
+      setLoadingNodes((s) => new Set(s).add(key))
+      try {
+        const r = await api.listTables(catalog, schema)
+        schemaTables = r.tables
+        setTables((s) => ({ ...s, [key]: r.tables }))
+      } catch {
+        setLoadingNodes((s) => { const n = new Set(s); n.delete(key); return n })
+        return
+      }
+      setLoadingNodes((s) => { const n = new Set(s); n.delete(key); return n })
+    }
+    const names = schemaTables.map((t) => t.full_name)
+    if (names.length === 0) return
+    const selectedSet = new Set(selectedTables)
+    const allSelected = names.every((n) => selectedSet.has(n))
+    if (allSelected) removeTables(names)
+    else addTables(names)
+  }
+
   const canProceedStep1 = title.trim().length > 0 && selectedTables.length > 0
 
   const goToStep = async (target: number) => {
@@ -148,6 +193,14 @@ export default function CreateRoom() {
       setStep(4)
     } else if (target === 5 && step === 4) {
       setStep(5)
+      // Kick off column lookup for the filter picker
+      if (selectedTables.length > 0) {
+        setAvailableColsLoading(true)
+        api.columnsFromTables(selectedTables)
+          .then((r) => setAvailableFilterCols(r.columns))
+          .catch(() => {})
+          .finally(() => setAvailableColsLoading(false))
+      }
     } else if (target < step) {
       setStep(target)
     }
@@ -166,8 +219,32 @@ export default function CreateRoom() {
         sample_queries: validQueries.length > 0 ? validQueries : undefined,
         instructions: instructions.trim() || undefined,
       })
-      clearTables()
       const roomId = result.space_id || result.id
+
+      // Persist row-level filter config if any was set up
+      if (roomId && filterColumns.length > 0) {
+        try {
+          for (const col of filterColumns) {
+            await api.addFilterColumn(roomId, col)
+          }
+          for (const u of filterUsers) {
+            for (const col of filterColumns) {
+              await api.setUserFilter(roomId, u.user_email, {
+                column_name: col.column_name,
+                allowed_values: u.values[col.column_name] || [],
+                principal_type: u.principal_type,
+                display_name: u.display_name,
+              })
+            }
+          }
+        } catch (filterErr: any) {
+          // Don't fail room creation if filter setup fails — surface as warning
+          console.error('Filter setup failed:', filterErr)
+          setError(`Room created, but filter setup failed: ${filterErr.message || 'unknown error'}. You can configure filters in Edit Room.`)
+        }
+      }
+
+      clearTables()
       navigate(roomId ? `/rooms/${roomId}` : '/rooms')
     } catch (e: any) { setError(e.message || 'Failed to create room') }
     finally { setCreating(false) }
@@ -180,6 +257,75 @@ export default function CreateRoom() {
     setValidating(false)
   }
 
+  const generateAllMetadata = async () => {
+    if (!descValidation) return
+    setBulkGenLoading(true); setBulkError('')
+    const tables = descValidation.tables.filter((t) => !t.error)
+    const results: typeof bulkGen = { ...bulkGen }
+    let failures = 0
+    for (let i = 0; i < tables.length; i++) {
+      const t = tables[i]
+      const label = t.table_name || t.full_name.split('.').pop() || t.full_name
+      setBulkGenProgress(`${i + 1}/${tables.length}: ${label}`)
+      try {
+        const r = await api.generateDescriptions({
+          full_name: t.full_name,
+          table_name: t.table_name || t.full_name.split('.').pop() || '',
+          columns: (t.columns || []).map((c) => ({ name: c.name, type: c.type, comment: c.comment })),
+          existing_comment: t.table_comment || '',
+        })
+        results[t.full_name] = { table_description: r.table_description || '', columns: r.columns || {} }
+        setBulkGen({ ...results })
+      } catch (e: any) {
+        failures++
+        console.warn(`[bulk-gen] ${t.full_name}:`, e?.message || e)
+      }
+    }
+    setBulkGenProgress('')
+    setBulkGenLoading(false)
+    if (failures > 0) setBulkError(`${failures} of ${tables.length} tables failed to generate — see console for details.`)
+  }
+
+  const saveAllBulkToUC = async () => {
+    if (!warehouseId) { setBulkError('Select a warehouse in Step 1 first'); return }
+    setBulkSaveLoading(true); setBulkError('')
+    const entries = Object.entries(bulkGen)
+    let totalOps = 0
+    for (const [, gen] of entries) {
+      if (gen.table_description) totalOps++
+      totalOps += Object.values(gen.columns).filter(Boolean).length
+    }
+    let saved = 0
+    try {
+      for (const [fullName, gen] of entries) {
+        if (gen.table_description) {
+          setBulkSaveProgress(`Saving ${saved + 1}/${totalOps}: ${fullName} (table)`)
+          await api.updateTableDescription(fullName, gen.table_description, warehouseId)
+          saved++
+        }
+        for (const [col, desc] of Object.entries(gen.columns)) {
+          if (!desc) continue
+          setBulkSaveProgress(`Saving ${saved + 1}/${totalOps}: ${fullName}.${col}`)
+          await api.updateColumnDescription(fullName, col, desc, warehouseId)
+          saved++
+        }
+      }
+      setBulkGen({})
+      setBulkSaveProgress('')
+      await refreshValidation()
+    } catch (e: any) {
+      setBulkError(`Saved ${saved}/${totalOps} — ${e.message || 'some updates failed'}`)
+    }
+    setBulkSaveLoading(false)
+  }
+
+  const discardAllBulk = () => {
+    setBulkGen({})
+    setBulkError('')
+  }
+
+  const bulkCount = Object.keys(bulkGen).length
+
   const [visibleCount, setVisibleCount] = useState(50)
   const q = pickerSearch.toLowerCase()
   const filteredCatalogs = q ? catalogs.filter((c) => c.name.toLowerCase().includes(q)) : catalogs
@@ -189,7 +335,7 @@ export default function CreateRoom() {
     <div className="max-w-3xl mx-auto p-8 pb-16">
       {/* Header */}
       <div className="flex items-center gap-3 mb-8">
-        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#D0A33C] to-[#3F1F14] flex items-center justify-center">
+        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#6366F1] to-[#4338CA] flex items-center justify-center">
           <Plus className="w-5 h-5 text-white" />
         </div>
         <div>
@@ -207,7 +353,7 @@ export default function CreateRoom() {
               className={`flex items-center gap-1.5 ${s.num <= step ? 'cursor-pointer' : 'cursor-default'}`}
             >
               <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${
-                s.num === step ? 'bg-[#D0A33C] text-white' : s.num < step ? 'bg-emerald-500 text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
+                s.num === step ? 'bg-[#6366F1] text-white' : s.num < step ? 'bg-emerald-500 text-white' : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
               }`}>
                 {s.num < step ? <Check className="w-3.5 h-3.5" /> : s.num}
               </div>
@@ -232,12 +378,12 @@ export default function CreateRoom() {
           <div>
             <label className="block text-sm font-medium mb-2">Room Name</label>
             <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g., Sales Analytics"
-              className="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#D0A33C] transition-colors" />
+              className="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#6366F1] transition-colors" />
           </div>
           <div>
             <label className="flex items-center gap-2 text-sm font-medium mb-2"><Warehouse className="w-4 h-4 text-[var(--text-secondary)]" /> SQL Warehouse</label>
             <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:border-[#D0A33C] transition-colors">
+              className="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:border-[#6366F1] transition-colors">
               <option value="">{warehouses.length === 0 ? 'Loading warehouses...' : 'Select a warehouse'}</option>
               {warehouses.map((wh) => (<option key={wh.id} value={wh.id}>{wh.name} ({wh.state.replace('STATE_', '').replace('State.', '')})</option>))}
             </select>
@@ -248,20 +394,20 @@ export default function CreateRoom() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-sm font-medium">Tables ({selectedTables.length})</label>
-              {selectedTables.length > 0 && <button onClick={openPicker} className="text-xs text-[#D0A33C] hover:text-[#D0A33C] font-medium">+ Add more</button>}
+              {selectedTables.length > 0 && <button onClick={openPicker} className="text-xs text-[#6366F1] hover:text-[#6366F1] font-medium">+ Add more</button>}
             </div>
             {selectedTables.length > 0 && (
               <div className="space-y-2 mb-3">
                 {selectedTables.map((table) => (
                   <div key={table} className="flex items-center justify-between px-4 py-2.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)]">
-                    <span className="text-sm font-mono text-[#D0A33C]">{table}</span>
+                    <span className="text-sm font-mono text-[#6366F1]">{table}</span>
                     <button onClick={() => removeTable(table)} className="text-[var(--text-secondary)] hover:text-red-400 transition-colors"><X className="w-4 h-4" /></button>
                   </div>
                 ))}
               </div>
             )}
             {!pickerOpen ? (
-              <button onClick={openPicker} className="w-full py-6 rounded-lg border-2 border-dashed border-[var(--border)] hover:border-[#D0A33C]/50 text-[var(--text-secondary)] hover:text-[#D0A33C] transition-colors flex flex-col items-center gap-2">
+              <button onClick={openPicker} className="w-full py-6 rounded-lg border-2 border-dashed border-[var(--border)] hover:border-[#6366F1]/50 text-[var(--text-secondary)] hover:text-[#6366F1] transition-colors flex flex-col items-center gap-2">
                 <Database className="w-5 h-5" /><span className="text-sm">Browse Catalog to select tables</span>
               </button>
             ) : (
@@ -270,12 +416,12 @@ export default function CreateRoom() {
                 visibleCatalogs={visibleCatalogs} filteredCatalogs={filteredCatalogs} visibleCount={visibleCount}
                 setVisibleCount={setVisibleCount} expandedCatalogs={expandedCatalogs} expandedSchemas={expandedSchemas}
                 schemas={schemas} tables={tables} loadingNodes={loadingNodes} selectedTables={selectedTables}
-                toggleCatalog={toggleCatalog} toggleSchema={toggleSchema} toggleTable={toggleTable}
+                toggleCatalog={toggleCatalog} toggleSchema={toggleSchema} toggleTable={toggleTable} selectAllInSchema={selectAllInSchema}
                 onClose={() => setPickerOpen(false)} />
             )}
           </div>
           <button onClick={() => goToStep(2)} disabled={!canProceedStep1}
-            className="w-full py-3 rounded-lg bg-[#D0A33C] hover:bg-[#b88d2e] text-white font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+            className="w-full py-3 rounded-lg bg-[#6366F1] hover:bg-[#4F46E5] text-white font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
             Next: Verify Descriptions <ArrowRight className="w-4 h-4" />
           </button>
         </div>
@@ -298,7 +444,7 @@ export default function CreateRoom() {
                   setGeneratingDesc(false)
                 }}
                 disabled={generatingDesc}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#325B6D]/10 text-[#325B6D] text-xs font-medium hover:bg-[#325B6D]/20 transition-colors disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#3B82F6]/10 text-[#3B82F6] text-xs font-medium hover:bg-[#3B82F6]/20 transition-colors disabled:opacity-50"
               >
                 {generatingDesc ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating...</> : <><Wand2 className="w-3.5 h-3.5" /> Generate with AI</>}
               </button>
@@ -306,7 +452,7 @@ export default function CreateRoom() {
             <textarea value={description} onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe what this room is for, or click 'Generate with AI' to auto-generate based on selected tables..."
               rows={5}
-              className="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#D0A33C] transition-colors resize-none text-sm" />
+              className="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#6366F1] transition-colors resize-none text-sm" />
           </div>
 
           {/* Table/Column Description Coverage */}
@@ -327,7 +473,7 @@ export default function CreateRoom() {
                     : <AlertTriangle className="w-5 h-5 text-amber-500" />}
                   <span className="text-sm font-semibold text-[var(--text-primary)]">Description Coverage: {descValidation.summary.description_coverage}%</span>
                   <button onClick={refreshValidation} disabled={validating}
-                    className="ml-auto text-xs text-[#D0A33C] hover:text-[#D0A33C] font-medium flex items-center gap-1">
+                    className="ml-auto text-xs text-[#6366F1] hover:text-[#6366F1] font-medium flex items-center gap-1">
                     <Loader2 className={`w-3 h-3 ${validating ? 'animate-spin' : 'hidden'}`} /> Refresh
                   </button>
                 </div>
@@ -344,9 +490,69 @@ export default function CreateRoom() {
                 </div>
               )}
 
+              {/* Bulk AI generation */}
+              <div className="rounded-lg border border-[#3B82F6]/30 bg-[#3B82F6]/5 p-4">
+                <div className="flex items-start gap-3 mb-3">
+                  <Wand2 className="w-5 h-5 text-[#3B82F6] shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-[var(--text-primary)]">Generate metadata for all tables</p>
+                    <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                      AI drafts table + column descriptions for every selected table in one click. Review per-card or save everything to Unity Catalog at once.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={generateAllMetadata}
+                    disabled={bulkGenLoading || bulkSaveLoading || descValidation.tables.length === 0}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#3B82F6] hover:bg-[#1E40AF] text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                  >
+                    {bulkGenLoading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating…</> : <><Wand2 className="w-3.5 h-3.5" /> Generate all ({descValidation.tables.length})</>}
+                  </button>
+                  {bulkCount > 0 && (
+                    <>
+                      <button
+                        onClick={saveAllBulkToUC}
+                        disabled={bulkSaveLoading || bulkGenLoading || !warehouseId}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                        title={!warehouseId ? 'Select a warehouse in Step 1 first' : `Save ${bulkCount} table drafts to Unity Catalog`}
+                      >
+                        {bulkSaveLoading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</> : <><Save className="w-3.5 h-3.5" /> Save all to UC ({bulkCount})</>}
+                      </button>
+                      <button
+                        onClick={discardAllBulk}
+                        disabled={bulkSaveLoading || bulkGenLoading}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] text-xs font-medium transition-colors disabled:opacity-50"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Discard drafts
+                      </button>
+                    </>
+                  )}
+                </div>
+                {(bulkGenProgress || bulkSaveProgress) && (
+                  <p className="text-[11px] text-[#3B82F6] mt-2 font-mono">
+                    {bulkGenProgress || bulkSaveProgress}
+                  </p>
+                )}
+                {bulkError && (
+                  <p className="text-[11px] text-red-500 mt-2">{bulkError}</p>
+                )}
+                {bulkCount > 0 && !bulkGenLoading && !bulkSaveLoading && (
+                  <p className="text-[11px] text-[var(--text-secondary)] mt-2">
+                    {bulkCount} table draft{bulkCount > 1 ? 's' : ''} ready — expand any card below to review, or click "Save all to UC" to apply them.
+                  </p>
+                )}
+              </div>
+
               <div className="space-y-3">
                 {descValidation.tables.map((t) => (
-                  <TableDescriptionCard key={t.full_name} table={t} warehouseId={warehouseId} onSaved={refreshValidation} />
+                  <TableDescriptionCard
+                    key={t.full_name}
+                    table={t}
+                    warehouseId={warehouseId}
+                    onSaved={refreshValidation}
+                    presetGenerated={bulkGen[t.full_name]}
+                  />
                 ))}
               </div>
 
@@ -369,7 +575,7 @@ export default function CreateRoom() {
               <SkipForward className="w-3.5 h-3.5" /> Skip to Instructions
             </button>
             <button onClick={() => goToStep(3)} disabled={validating}
-              className="flex-1 py-3 rounded-lg bg-[#D0A33C] hover:bg-[#b88d2e] text-white font-semibold text-sm transition-all disabled:opacity-40 flex items-center justify-center gap-2">
+              className="flex-1 py-3 rounded-lg bg-[#6366F1] hover:bg-[#4F46E5] text-white font-semibold text-sm transition-all disabled:opacity-40 flex items-center justify-center gap-2">
               Next: Analysis <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -379,9 +585,9 @@ export default function CreateRoom() {
       {/* ─── Step 3: Analysis (Optional) ─── */}
       {step === 3 && (
         <div className="space-y-6">
-          <div className="p-4 rounded-lg bg-[#D0A33C]/5 border border-[#D0A33C]/15">
+          <div className="p-4 rounded-lg bg-[#6366F1]/5 border border-[#6366F1]/15">
             <div className="flex items-center gap-2 mb-1">
-              <BarChart3 className="w-4 h-4 text-[#D0A33C]" />
+              <BarChart3 className="w-4 h-4 text-[#6366F1]" />
               <span className="text-sm font-semibold text-[var(--text-primary)]">Data Analysis</span>
               <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-secondary)]">Optional</span>
             </div>
@@ -507,14 +713,14 @@ export default function CreateRoom() {
                     value={datasetDesc}
                     onChange={(e) => setDatasetDesc(e.target.value)}
                     rows={Math.max(4, Math.ceil(datasetDesc.length / 80))}
-                    className="w-full px-3 py-2 rounded-md bg-[var(--bg-primary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#D0A33C] resize-none"
+                    className="w-full px-3 py-2 rounded-md bg-[var(--bg-primary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#6366F1] resize-none"
                   />
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => {
                         setInstructions((prev) => prev ? `${prev}\n\n${datasetDesc}` : datasetDesc)
                       }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#D0A33C] text-white text-xs font-medium hover:bg-[#b88d2e] transition-colors"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#6366F1] text-white text-xs font-medium hover:bg-[#4F46E5] transition-colors"
                     >
                       <MessageSquarePlus className="w-3 h-3" /> Add to Instructions
                     </button>
@@ -533,7 +739,7 @@ export default function CreateRoom() {
               <ArrowLeft className="w-4 h-4" /> Back
             </button>
             <button onClick={() => goToStep(4)}
-              className="flex-1 py-3 rounded-lg bg-[#D0A33C] hover:bg-[#b88d2e] text-white font-semibold text-sm transition-all flex items-center justify-center gap-2">
+              className="flex-1 py-3 rounded-lg bg-[#6366F1] hover:bg-[#4F46E5] text-white font-semibold text-sm transition-all flex items-center justify-center gap-2">
               Next: SQL Instructions <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -551,7 +757,7 @@ export default function CreateRoom() {
               onChange={(e) => setInstructions(e.target.value)}
               placeholder="e.g., Always filter by active status. Use fiscal year dates. Revenue should be calculated as quantity * unit_price..."
               rows={4}
-              className="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#D0A33C] transition-colors resize-none text-sm"
+              className="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#6366F1] transition-colors resize-none text-sm"
             />
           </div>
 
@@ -561,7 +767,7 @@ export default function CreateRoom() {
               <h3 className="text-base font-semibold text-[var(--text-primary)]">SQL Queries &amp; Functions</h3>
               <button
                 onClick={() => setSampleQueries([...sampleQueries, { question: '', sql: '' }])}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#D0A33C]/10 text-[#D0A33C] text-xs font-medium hover:bg-[#D0A33C]/20 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#6366F1]/10 text-[#6366F1] text-xs font-medium hover:bg-[#6366F1]/20 transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" /> Add Query
               </button>
@@ -579,7 +785,7 @@ export default function CreateRoom() {
             {sampleQueries.length === 0 && (
               <button
                 onClick={() => setSampleQueries([{ question: '', sql: '' }])}
-                className="w-full py-8 rounded-lg border-2 border-dashed border-[var(--border)] hover:border-[#D0A33C]/50 text-[var(--text-secondary)] hover:text-[#D0A33C] transition-colors flex flex-col items-center gap-2"
+                className="w-full py-8 rounded-lg border-2 border-dashed border-[var(--border)] hover:border-[#6366F1]/50 text-[var(--text-secondary)] hover:text-[#6366F1] transition-colors flex flex-col items-center gap-2"
               >
                 <Code className="w-5 h-5" />
                 <span className="text-sm">Add a SQL query manually</span>
@@ -610,7 +816,7 @@ export default function CreateRoom() {
                           setSampleQueries(updated)
                         }}
                         placeholder="e.g., What are the top 10 customers by revenue?"
-                        className="w-full px-3 py-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#D0A33C] transition-colors text-sm"
+                        className="w-full px-3 py-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#6366F1] transition-colors text-sm"
                       />
                     </div>
                     <div>
@@ -624,7 +830,7 @@ export default function CreateRoom() {
                         }}
                         placeholder="SELECT customer_name, SUM(revenue) as total_revenue FROM sales GROUP BY customer_name ORDER BY total_revenue DESC LIMIT 10"
                         rows={4}
-                        className="w-full px-3 py-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#D0A33C] transition-colors text-sm font-mono resize-none"
+                        className="w-full px-3 py-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#6366F1] transition-colors text-sm font-mono resize-none"
                       />
                     </div>
                   </div>
@@ -653,7 +859,7 @@ export default function CreateRoom() {
                 <div className="space-y-1">
                   {selectedTables.map((t) => (
                     <div key={t} className="flex items-center gap-2 text-sm">
-                      <Table2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" /><span className="font-mono text-[#D0A33C]">{t}</span>
+                      <Table2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" /><span className="font-mono text-[#6366F1]">{t}</span>
                     </div>
                   ))}
                 </div>
@@ -672,7 +878,7 @@ export default function CreateRoom() {
                 </div>
               )}
               {(instructions.trim() || sampleQueries.some(sq => sq.question || sq.sql)) && (
-                <div className="p-2.5 rounded-md bg-[#D0A33C]/5 border border-[#D0A33C]/15 text-[11px] text-[var(--text-secondary)]">
+                <div className="p-2.5 rounded-md bg-[#6366F1]/5 border border-[#6366F1]/15 text-[11px] text-[var(--text-secondary)]">
                   Instructions and sample queries will be included in the room description as context for Genie.
                 </div>
               )}
@@ -700,7 +906,7 @@ export default function CreateRoom() {
                       {validQueries.map((sq, i) => (
                         <div key={i} className="bg-[var(--bg-tertiary)] px-3 py-2 rounded-md">
                           {sq.question && <p className="text-sm text-[var(--text-primary)] mb-1">{sq.question}</p>}
-                          {sq.sql && <pre className="text-xs text-[#D0A33C] font-mono overflow-x-auto">{sq.sql}</pre>}
+                          {sq.sql && <pre className="text-xs text-[#6366F1] font-mono overflow-x-auto">{sq.sql}</pre>}
                         </div>
                       ))}
                     </div>
@@ -710,13 +916,181 @@ export default function CreateRoom() {
             </div>
           </div>
 
+          {/* Access & Filters (optional) */}
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] overflow-hidden">
+            <div className="px-4 py-3 bg-[var(--bg-tertiary)] border-b border-[var(--border)] flex items-center gap-2">
+              <Lock className="w-4 h-4 text-[#6366F1]" />
+              <span className="text-sm font-semibold text-[var(--text-primary)]">Access &amp; Filters</span>
+              <span className="text-[10px] text-[var(--text-secondary)] ml-auto">Optional</span>
+            </div>
+            <div className="p-4 space-y-4">
+              <p className="text-xs text-[var(--text-secondary)]">
+                Row-level security. Configure filter columns (e.g. <code>region</code>, <code>vendor_id</code>) and grant per-user
+                allowed values. Leave empty for an unrestricted room — you can always set this up later in Edit Room.
+              </p>
+
+              {/* Filter columns */}
+              <div>
+                <h4 className="text-xs font-semibold text-[var(--text-primary)] mb-2">Filter columns</h4>
+                <div className="flex gap-2 mb-2">
+                  <select
+                    value={newFilterCol}
+                    onChange={(e) => setNewFilterCol(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm focus:outline-none focus:border-[#6366F1]"
+                  >
+                    <option value="">
+                      {availableColsLoading ? 'Loading columns…' :
+                       availableFilterCols.length === 0 ? 'No columns found in selected tables' :
+                       'Select a column…'}
+                    </option>
+                    {availableFilterCols
+                      .filter((c) => !filterColumns.some((f) => f.column_name === c.name))
+                      .map((c) => (
+                        <option key={c.name} value={c.name}>
+                          {c.name} ({c.type}) {c.tables.length > 1 ? `· ${c.tables.length} tables` : ''}
+                        </option>
+                      ))}
+                  </select>
+                  <input type="text" value={newFilterColLabel} onChange={(e) => setNewFilterColLabel(e.target.value)}
+                    placeholder="Label (optional)"
+                    className="w-40 px-3 py-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm focus:outline-none focus:border-[#6366F1]" />
+                  <button
+                    onClick={() => {
+                      const name = newFilterCol.trim()
+                      if (!name) return
+                      if (filterColumns.some((c) => c.column_name === name)) return
+                      setFilterColumns([...filterColumns, { column_name: name, label: newFilterColLabel.trim() || undefined }])
+                      setNewFilterCol('')
+                      setNewFilterColLabel('')
+                    }}
+                    disabled={!newFilterCol}
+                    className="px-3 py-2 rounded-md bg-[#6366F1]/10 text-[#6366F1] text-xs font-medium hover:bg-[#6366F1]/20 disabled:opacity-40 flex items-center gap-1">
+                    <Plus className="w-3.5 h-3.5" /> Add
+                  </button>
+                </div>
+                {filterColumns.length === 0 ? (
+                  <p className="text-xs text-[var(--text-secondary)] italic">No filter columns — room will be unrestricted.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {filterColumns.map((c) => (
+                      <span key={c.column_name} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)] text-xs">
+                        <code className="text-[#6366F1]">{c.column_name}</code>
+                        {c.label && c.label !== c.column_name && <span className="text-[var(--text-secondary)]">({c.label})</span>}
+                        <button
+                          onClick={() => {
+                            setFilterColumns(filterColumns.filter((x) => x.column_name !== c.column_name))
+                            // Remove this column from any per-user mappings
+                            setFilterUsers(filterUsers.map((u) => {
+                              const v = { ...u.values }
+                              delete v[c.column_name]
+                              return { ...u, values: v }
+                            }))
+                          }}
+                          className="text-[var(--text-secondary)] hover:text-red-400">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* User & group access */}
+              {filterColumns.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <UsersIcon className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+                    <h4 className="text-xs font-semibold text-[var(--text-primary)]">User &amp; group access</h4>
+                  </div>
+                  <PrincipalPicker
+                    excludeIds={new Set(filterUsers.map((u) => u.user_email.toLowerCase()))}
+                    onPick={(p: Principal) => {
+                      const id = p.type === 'user' ? (p.email || p.user_name || p.id).toLowerCase() : p.id
+                      if (filterUsers.some((u) => u.user_email.toLowerCase() === id.toLowerCase())) return
+                      setFilterUsers([
+                        ...filterUsers,
+                        {
+                          user_email: id,
+                          principal_type: p.type,
+                          display_name: p.display_name,
+                          values: {},
+                        },
+                      ])
+                    }}
+                  />
+                  {filterUsers.length === 0 ? (
+                    <p className="text-xs text-[var(--text-secondary)] italic mt-2">No users or groups granted access yet — room will be closed when created.</p>
+                  ) : (
+                    <div className="overflow-x-auto mt-3">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-left text-[var(--text-secondary)] border-b border-[var(--border)]">
+                            <th className="py-2 pr-3 font-medium">Principal</th>
+                            {filterColumns.map((c) => (
+                              <th key={c.column_name} className="py-2 pr-3 font-medium">
+                                <code className="text-[#6366F1]">{c.column_name}</code>
+                              </th>
+                            ))}
+                            <th className="py-2"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filterUsers.map((u, ui) => (
+                            <tr key={u.user_email} className="border-b border-[var(--border)] last:border-0">
+                              <td className="py-2 pr-3 max-w-[220px]">
+                                <div className="flex items-center gap-1.5">
+                                  {u.principal_type === 'group'
+                                    ? <UsersIcon className="w-3 h-3 text-[#3B82F6] shrink-0" />
+                                    : <UsersIcon className="w-3 h-3 text-[var(--text-secondary)] shrink-0" />}
+                                  <div className="min-w-0">
+                                    <p className="text-[var(--text-primary)] truncate">{u.display_name || u.user_email}</p>
+                                    {u.principal_type === 'group' && (
+                                      <p className="text-[9px] text-[#3B82F6] font-semibold">GROUP</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                              {filterColumns.map((c) => (
+                                <td key={c.column_name} className="py-2 pr-3">
+                                  <input
+                                    type="text"
+                                    value={(u.values[c.column_name] || []).join(', ')}
+                                    onChange={(e) => {
+                                      const vals = e.target.value.split(',').map((v) => v.trim()).filter(Boolean)
+                                      const updated = [...filterUsers]
+                                      updated[ui] = { ...u, values: { ...u.values, [c.column_name]: vals } }
+                                      setFilterUsers(updated)
+                                    }}
+                                    placeholder="e.g., EMEA, APAC"
+                                    className="w-full px-2 py-1 rounded bg-[var(--bg-tertiary)] border border-[var(--border)] text-[11px] focus:outline-none focus:border-[#6366F1]"
+                                  />
+                                </td>
+                              ))}
+                              <td className="py-2">
+                                <button onClick={() => setFilterUsers(filterUsers.filter((_, i) => i !== ui))}
+                                  className="text-[var(--text-secondary)] hover:text-red-400">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <p className="text-[10px] text-[var(--text-secondary)] mt-2">Comma-separate values. Empty cell = no access for that column.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="flex gap-3">
             <button onClick={() => goToStep(4)}
               className="flex-1 py-3 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] font-medium text-sm transition-colors flex items-center justify-center gap-2">
               <ArrowLeft className="w-4 h-4" /> Back
             </button>
             <button onClick={handleCreate} disabled={creating}
-              className="flex-1 py-3 rounded-lg bg-gradient-to-r from-[#D0A33C] to-[#3F1F14] hover:from-[#b88d2e] hover:to-[#3F1F14] text-white font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+              className="flex-1 py-3 rounded-lg bg-gradient-to-r from-[#6366F1] to-[#4338CA] hover:from-[#4F46E5] hover:to-[#4338CA] text-white font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
               {creating ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating...</> : <><Sparkles className="w-4 h-4" /> Create Genie Room</>}
             </button>
           </div>
@@ -736,7 +1110,7 @@ function StepNav({ onBack, onNext, nextLabel, disabled }: { onBack: () => void; 
         <ArrowLeft className="w-4 h-4" /> Back
       </button>
       <button onClick={onNext} disabled={disabled}
-        className="flex-1 py-3 rounded-lg bg-[#D0A33C] hover:bg-[#b88d2e] text-white font-semibold text-sm transition-all disabled:opacity-40 flex items-center justify-center gap-2">
+        className="flex-1 py-3 rounded-lg bg-[#6366F1] hover:bg-[#4F46E5] text-white font-semibold text-sm transition-all disabled:opacity-40 flex items-center justify-center gap-2">
         {nextLabel} <ArrowRight className="w-4 h-4" />
       </button>
     </div>
@@ -755,8 +1129,11 @@ function ReviewRow({ label, value }: { label: string; value: string }) {
 
 // ── Table Description Card with Editing ──
 
-function TableDescriptionCard({ table, warehouseId, onSaved }: {
-  table: DescriptionValidation['tables'][0]; warehouseId: string; onSaved: () => void
+function TableDescriptionCard({ table, warehouseId, onSaved, presetGenerated }: {
+  table: DescriptionValidation['tables'][0]
+  warehouseId: string
+  onSaved: () => void
+  presetGenerated?: { table_description: string; columns: Record<string, string> }
 }) {
   const [open, setOpen] = useState(false)
   // Manual editing
@@ -772,6 +1149,15 @@ function TableDescriptionCard({ table, warehouseId, onSaved }: {
   const [generatedColDescs, setGeneratedColDescs] = useState<Record<string, string>>({})
   const [savingAll, setSavingAll] = useState(false)
   const [saveProgress, setSaveProgress] = useState('')
+
+  // When the parent provides a bulk-generated draft, load it into the card's state
+  useEffect(() => {
+    if (presetGenerated) {
+      setGeneratedTableDesc(presetGenerated.table_description || '')
+      setGeneratedColDescs(presetGenerated.columns || {})
+      setOpen(true)
+    }
+  }, [presetGenerated])
 
   if (table.error) {
     return (
@@ -861,7 +1247,7 @@ function TableDescriptionCard({ table, warehouseId, onSaved }: {
   }
 
   return (
-    <div className={`rounded-lg border overflow-hidden ${allGood && !hasGenerated ? 'border-emerald-500/20' : hasGenerated ? 'border-[#325B6D]/30' : 'border-amber-500/20'}`}>
+    <div className={`rounded-lg border overflow-hidden ${allGood && !hasGenerated ? 'border-emerald-500/20' : hasGenerated ? 'border-[#3B82F6]/30' : 'border-amber-500/20'}`}>
       <div className="flex items-center">
         <button onClick={() => setOpen(!open)} className="flex-1 flex items-center gap-3 px-4 py-3 text-left hover:bg-[var(--bg-hover)] transition-colors min-w-0">
           {allGood ? <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> : <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />}
@@ -870,7 +1256,7 @@ function TableDescriptionCard({ table, warehouseId, onSaved }: {
             <div className="flex items-center gap-3 mt-0.5 text-xs text-[var(--text-secondary)]">
               <span className={hasTableDesc ? 'text-emerald-600' : 'text-amber-600'}>{hasTableDesc ? 'Has description' : 'No description'}</span>
               <span>Columns: {table.described_columns}/{table.total_columns}</span>
-              {hasGenerated && <span className="text-[#325B6D] font-medium">AI draft ready</span>}
+              {hasGenerated && <span className="text-[#3B82F6] font-medium">AI draft ready</span>}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -884,7 +1270,7 @@ function TableDescriptionCard({ table, warehouseId, onSaved }: {
         {/* Generate button in header */}
         {!hasGenerated && (
           <button onClick={(e) => { e.stopPropagation(); generateWithAI() }} disabled={generating}
-            className="mr-3 px-2.5 py-1.5 rounded-md bg-[#325B6D]/10 text-[#325B6D] text-[11px] font-medium hover:bg-[#325B6D]/20 disabled:opacity-50 transition-colors flex items-center gap-1 shrink-0"
+            className="mr-3 px-2.5 py-1.5 rounded-md bg-[#3B82F6]/10 text-[#3B82F6] text-[11px] font-medium hover:bg-[#3B82F6]/20 disabled:opacity-50 transition-colors flex items-center gap-1 shrink-0"
             title="Generate descriptions with AI">
             {generating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
             {generating ? 'Generating...' : 'Generate'}
@@ -903,11 +1289,11 @@ function TableDescriptionCard({ table, warehouseId, onSaved }: {
           )}
           {/* AI-generated banner + save all */}
           {hasGenerated && (
-            <div className="mt-3 mb-3 p-3 rounded-lg bg-[#325B6D]/5 border border-[#325B6D]/20">
+            <div className="mt-3 mb-3 p-3 rounded-lg bg-[#3B82F6]/5 border border-[#3B82F6]/20">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <Wand2 className="w-3.5 h-3.5 text-[#325B6D]" />
-                  <span className="text-xs font-semibold text-[#325B6D]">AI-Generated Descriptions</span>
+                  <Wand2 className="w-3.5 h-3.5 text-[#3B82F6]" />
+                  <span className="text-xs font-semibold text-[#3B82F6]">AI-Generated Descriptions</span>
                 </div>
                 <div className="flex items-center gap-2">
                   {saveProgress && <span className="text-[10px] text-[var(--text-secondary)]">{saveProgress}</span>}
@@ -916,7 +1302,7 @@ function TableDescriptionCard({ table, warehouseId, onSaved }: {
                     Discard
                   </button>
                   <button onClick={saveAllGenerated} disabled={savingAll || !warehouseId}
-                    className="px-2.5 py-1 rounded-md bg-[#325B6D] text-white text-[10px] font-medium hover:bg-[#274a59] disabled:opacity-50 flex items-center gap-1 transition-colors"
+                    className="px-2.5 py-1 rounded-md bg-[#3B82F6] text-white text-[10px] font-medium hover:bg-[#1D4ED8] disabled:opacity-50 flex items-center gap-1 transition-colors"
                     title={!warehouseId ? 'Select a warehouse in Step 1 first' : 'Save all descriptions to Unity Catalog'}>
                     {savingAll ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Save className="w-2.5 h-2.5" />} Save All to UC
                   </button>
@@ -934,23 +1320,23 @@ function TableDescriptionCard({ table, warehouseId, onSaved }: {
               <span className="text-xs font-medium text-[var(--text-secondary)]">Table Description</span>
               {!editingTableDesc && !hasGenerated && warehouseId && (
                 <button onClick={() => { setTableDesc(table.table_comment || ''); setEditingTableDesc(true) }}
-                  className="text-xs text-[#D0A33C] hover:text-[#D0A33C] flex items-center gap-1"><Pencil className="w-3 h-3" /> Edit</button>
+                  className="text-xs text-[#6366F1] hover:text-[#6366F1] flex items-center gap-1"><Pencil className="w-3 h-3" /> Edit</button>
               )}
             </div>
             {hasGenerated && generatedTableDesc !== null ? (
               <textarea value={generatedTableDesc} onChange={(e) => setGeneratedTableDesc(e.target.value)}
                 rows={Math.max(2, Math.ceil((generatedTableDesc || '').length / 80))}
-                className="w-full px-3 py-1.5 rounded-md bg-[#325B6D]/5 border border-[#325B6D]/20 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#325B6D] resize-none" />
+                className="w-full px-3 py-1.5 rounded-md bg-[#3B82F6]/5 border border-[#3B82F6]/20 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#3B82F6] resize-none" />
             ) : editingTableDesc ? (
               <div className="space-y-2">
                 <textarea value={tableDesc} onChange={(e) => setTableDesc(e.target.value)}
                   placeholder="Add a description for this table..."
                   rows={Math.max(2, Math.ceil((tableDesc || '').length / 80))}
-                  className="w-full px-3 py-1.5 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#D0A33C] resize-none"
+                  className="w-full px-3 py-1.5 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#6366F1] resize-none"
                   autoFocus />
                 <div className="flex gap-2">
                   <button onClick={saveTableDesc} disabled={savingTableDesc}
-                    className="px-3 py-1.5 rounded-md bg-[#D0A33C] text-white text-xs font-medium hover:bg-[#b88d2e] disabled:opacity-50 flex items-center gap-1">
+                    className="px-3 py-1.5 rounded-md bg-[#6366F1] text-white text-xs font-medium hover:bg-[#4F46E5] disabled:opacity-50 flex items-center gap-1">
                     {savingTableDesc ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Save
                   </button>
                   <button onClick={() => setEditingTableDesc(false)} className="px-2 py-1.5 rounded-md bg-[var(--bg-tertiary)] text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Cancel</button>
@@ -978,18 +1364,18 @@ function TableDescriptionCard({ table, warehouseId, onSaved }: {
                     )}
                     {!hasGenerated && !c.has_comment && editingCol !== c.name && warehouseId && (
                       <button onClick={() => { setEditingCol(c.name); setColDesc(c.comment || '') }}
-                        className="ml-auto text-[10px] text-[#D0A33C] hover:text-[#D0A33C] flex items-center gap-0.5"><Pencil className="w-2.5 h-2.5" /> Add</button>
+                        className="ml-auto text-[10px] text-[#6366F1] hover:text-[#6366F1] flex items-center gap-0.5"><Pencil className="w-2.5 h-2.5" /> Add</button>
                     )}
                     {!hasGenerated && c.has_comment && editingCol !== c.name && warehouseId && (
                       <button onClick={() => { setEditingCol(c.name); setColDesc(c.comment || '') }}
-                        className="text-[10px] text-[#D0A33C] hover:text-[#D0A33C] flex items-center gap-0.5 shrink-0"><Pencil className="w-2.5 h-2.5" /></button>
+                        className="text-[10px] text-[#6366F1] hover:text-[#6366F1] flex items-center gap-0.5 shrink-0"><Pencil className="w-2.5 h-2.5" /></button>
                     )}
                   </div>
                   {/* AI-generated column description (editable inline) */}
                   {hasGenerated && genDesc !== undefined && (
                     <div className="ml-5 mt-1">
                       <input type="text" value={genDesc} onChange={(e) => setGeneratedColDescs((prev) => ({ ...prev, [c.name]: e.target.value }))}
-                        className="w-full px-2.5 py-1 rounded-md bg-[#325B6D]/5 border border-[#325B6D]/20 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#325B6D]" />
+                        className="w-full px-2.5 py-1 rounded-md bg-[#3B82F6]/5 border border-[#3B82F6]/20 text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#3B82F6]" />
                     </div>
                   )}
                   {/* Show existing description when generated is present but not for this column */}
@@ -1001,10 +1387,10 @@ function TableDescriptionCard({ table, warehouseId, onSaved }: {
                     <div className="flex gap-2 mt-1.5 ml-5">
                       <input type="text" value={colDesc} onChange={(e) => setColDesc(e.target.value)}
                         placeholder={`Describe ${c.name}...`}
-                        className="flex-1 px-2.5 py-1 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#D0A33C]"
+                        className="flex-1 px-2.5 py-1 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[#6366F1]"
                         autoFocus onKeyDown={(e) => { if (e.key === 'Enter') saveColDesc(c.name) }} />
                       <button onClick={() => saveColDesc(c.name)} disabled={savingCol}
-                        className="px-2 py-1 rounded-md bg-[#D0A33C] text-white text-[10px] font-medium hover:bg-[#b88d2e] disabled:opacity-50 flex items-center gap-1">
+                        className="px-2 py-1 rounded-md bg-[#6366F1] text-white text-[10px] font-medium hover:bg-[#4F46E5] disabled:opacity-50 flex items-center gap-1">
                         {savingCol ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Save className="w-2.5 h-2.5" />} Save
                       </button>
                       <button onClick={() => setEditingCol(null)} className="px-2 py-1 rounded-md bg-[var(--bg-tertiary)] text-[10px] text-[var(--text-secondary)]">Cancel</button>
@@ -1093,11 +1479,11 @@ function SqlFileUploader({ onAddAsQuery }: {
       {/* Source buttons */}
       <div className="flex gap-2">
         <button onClick={() => fileInputRef.current?.click()}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-xs font-medium text-[var(--text-secondary)] hover:text-[#D0A33C] hover:border-[#D0A33C]/30 transition-colors">
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-xs font-medium text-[var(--text-secondary)] hover:text-[#6366F1] hover:border-[#6366F1]/30 transition-colors">
           <Upload className="w-3.5 h-3.5" /> Upload from computer
         </button>
         <button onClick={() => { setShowWorkspaceBrowser(true); browseWorkspace(wsPath === '/' ? '/' : wsPath) }}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-xs font-medium text-[var(--text-secondary)] hover:text-[#325B6D] hover:border-[#325B6D]/30 transition-colors">
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-xs font-medium text-[var(--text-secondary)] hover:text-[#3B82F6] hover:border-[#3B82F6]/30 transition-colors">
           <FolderOpen className="w-3.5 h-3.5" /> Browse workspace
         </button>
       </div>
@@ -1106,7 +1492,7 @@ function SqlFileUploader({ onAddAsQuery }: {
       {showWorkspaceBrowser && (
         <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] overflow-hidden">
           <div className="px-3 py-2.5 bg-[var(--bg-tertiary)] border-b border-[var(--border)] flex items-center gap-2">
-            <FolderOpen className="w-3.5 h-3.5 text-[#325B6D]" />
+            <FolderOpen className="w-3.5 h-3.5 text-[#3B82F6]" />
             <span className="text-xs font-semibold text-[var(--text-primary)] flex-1 truncate">{wsPath}</span>
             <button onClick={() => setShowWorkspaceBrowser(false)}
               className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]"><X className="w-3.5 h-3.5" /></button>
@@ -1130,11 +1516,11 @@ function SqlFileUploader({ onAddAsQuery }: {
                       onClick={() => isDir ? browseWorkspace(item.path) : !alreadyAdded && importWorkspaceFile(item)}
                       disabled={(!isDir && alreadyAdded) || wsReadingFile === item.path}
                       className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors ${alreadyAdded && !isDir ? 'bg-emerald-500/5' : 'hover:bg-[var(--bg-hover)]'} disabled:opacity-60`}>
-                      {isDir ? <Folder className="w-3.5 h-3.5 text-amber-500 shrink-0" /> : <FileText className={`w-3.5 h-3.5 shrink-0 ${alreadyAdded ? 'text-emerald-500' : item.is_sql ? 'text-[#D0A33C]' : 'text-[var(--text-secondary)]'}`} />}
+                      {isDir ? <Folder className="w-3.5 h-3.5 text-amber-500 shrink-0" /> : <FileText className={`w-3.5 h-3.5 shrink-0 ${alreadyAdded ? 'text-emerald-500' : item.is_sql ? 'text-[#6366F1]' : 'text-[var(--text-secondary)]'}`} />}
                       <span className={`flex-1 text-left truncate ${alreadyAdded ? 'text-emerald-600' : item.is_sql ? 'text-[var(--text-primary)] font-medium' : 'text-[var(--text-secondary)]'}`}>{item.name}</span>
-                      {wsReadingFile === item.path && <Loader2 className="w-3 h-3 animate-spin text-[#D0A33C]" />}
+                      {wsReadingFile === item.path && <Loader2 className="w-3 h-3 animate-spin text-[#6366F1]" />}
                       {!isDir && alreadyAdded && <span className="flex items-center gap-1 text-[10px] text-emerald-600 font-medium"><CheckCircle2 className="w-3 h-3" /> Added as query</span>}
-                      {!isDir && item.is_sql && !alreadyAdded && wsReadingFile !== item.path && <span className="text-[10px] text-[#D0A33C] font-medium">Import</span>}
+                      {!isDir && item.is_sql && !alreadyAdded && wsReadingFile !== item.path && <span className="text-[10px] text-[#6366F1] font-medium">Import</span>}
                       {isDir && <ChevronRight className="w-3 h-3 text-[var(--text-secondary)]" />}
                     </button>
                   )
@@ -1196,7 +1582,7 @@ function AnalysisCard({ icon: Icon, title, description, loading, done, disabled,
         </div>
         {!done && (
           <button onClick={onRun} disabled={loading || disabled}
-            className="shrink-0 px-3 py-1.5 rounded-md bg-[#D0A33C]/10 text-[#D0A33C] text-xs font-medium hover:bg-[#D0A33C]/20 disabled:opacity-40 transition-colors flex items-center gap-1.5"
+            className="shrink-0 px-3 py-1.5 rounded-md bg-[#6366F1]/10 text-[#6366F1] text-xs font-medium hover:bg-[#6366F1]/20 disabled:opacity-40 transition-colors flex items-center gap-1.5"
             title={disabled ? disabledReason : undefined}>
             {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <BarChart3 className="w-3 h-3" />}
             {loading ? 'Running...' : 'Run'}
@@ -1230,7 +1616,7 @@ function CatalogPicker({
   pickerSearch, setPickerSearch, searching, searchResults,
   catalogsLoading, visibleCatalogs, filteredCatalogs, visibleCount, setVisibleCount,
   expandedCatalogs, expandedSchemas, schemas, tables, loadingNodes,
-  selectedTables, toggleCatalog, toggleSchema, toggleTable, onClose,
+  selectedTables, toggleCatalog, toggleSchema, toggleTable, selectAllInSchema, onClose,
 }: any) {
   const q = pickerSearch.trim()
   const hasActiveSearch = q.length >= 2
@@ -1242,7 +1628,7 @@ function CatalogPicker({
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-secondary)]" />
           <input type="text" value={pickerSearch} onChange={(e) => setPickerSearch(e.target.value)}
             placeholder="Search tables (e.g. trips or catalog.schema.table)..."
-            className="w-full pl-8 pr-8 py-1.5 rounded-md bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#D0A33C] transition-colors text-sm"
+            className="w-full pl-8 pr-8 py-1.5 rounded-md bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#6366F1] transition-colors text-sm"
             autoFocus />
           {pickerSearch && <button onClick={() => setPickerSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"><X className="w-3.5 h-3.5" /></button>}
         </div>
@@ -1259,7 +1645,7 @@ function CatalogPicker({
                 const isSelected = selectedTables.includes(r.full_name)
                 return (
                   <button key={r.full_name} onClick={() => toggleTable(r.full_name)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[var(--bg-hover)] text-sm transition-colors">
-                    <div className={`shrink-0 rounded border flex items-center justify-center ${isSelected ? 'bg-[#D0A33C] border-[#D0A33C]' : 'border-[var(--border)]'}`} style={{ width: 18, height: 18 }}>
+                    <div className={`shrink-0 rounded border flex items-center justify-center ${isSelected ? 'bg-[#6366F1] border-[#6366F1]' : 'border-[var(--border)]'}`} style={{ width: 18, height: 18 }}>
                       {isSelected && <Check className="w-3 h-3 text-white" />}
                     </div>
                     <Table2 className="w-3.5 h-3.5 text-emerald-500" />
@@ -1281,7 +1667,7 @@ function CatalogPicker({
                   }
                 }}
                   className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[var(--bg-hover)] text-sm transition-colors">
-                  {r.type === 'catalog' ? <Database className="w-3.5 h-3.5 text-[#D0A33C]" /> : <Layers className="w-3.5 h-3.5 text-[#325B6D]" />}
+                  {r.type === 'catalog' ? <Database className="w-3.5 h-3.5 text-[#6366F1]" /> : <Layers className="w-3.5 h-3.5 text-[#3B82F6]" />}
                   <span className="font-medium">{r.name}</span>
                   <span className="ml-auto text-[10px] text-[var(--text-secondary)] uppercase tracking-wider">
                     {r.type === 'catalog' ? 'catalog' : 'schema'} &rsaquo;
@@ -1303,21 +1689,45 @@ function CatalogPicker({
               <div key={cat.name}>
                 <button onClick={() => toggleCatalog(cat.name)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[var(--bg-hover)] text-sm transition-colors">
                   {loadingNodes.has(cat.name) ? <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--text-secondary)]" /> : expandedCatalogs.has(cat.name) ? <ChevronDown className="w-3.5 h-3.5 text-[var(--text-secondary)]" /> : <ChevronRight className="w-3.5 h-3.5 text-[var(--text-secondary)]" />}
-                  <Database className="w-3.5 h-3.5 text-[#D0A33C]" /><span className="font-medium">{cat.name}</span>
+                  <Database className="w-3.5 h-3.5 text-[#6366F1]" /><span className="font-medium">{cat.name}</span>
                 </button>
                 {expandedCatalogs.has(cat.name) && schemas[cat.name]?.map((sch: Schema) => {
                   const sk = `${cat.name}.${sch.name}`
+                  const schemaTables = tables[sk] as Table[] | undefined
+                  const schemaTableCount = schemaTables?.length ?? 0
+                  const selectedInSchema = schemaTables
+                    ? schemaTables.filter((t) => selectedTables.includes(t.full_name)).length
+                    : 0
+                  const allSelected = schemaTableCount > 0 && selectedInSchema === schemaTableCount
+                  const someSelected = selectedInSchema > 0 && !allSelected
                   return (
                     <div key={sch.name} className="ml-4">
-                      <button onClick={() => toggleSchema(cat.name, sch.name)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[var(--bg-hover)] text-sm transition-colors">
-                        {loadingNodes.has(sk) ? <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--text-secondary)]" /> : expandedSchemas.has(sk) ? <ChevronDown className="w-3.5 h-3.5 text-[var(--text-secondary)]" /> : <ChevronRight className="w-3.5 h-3.5 text-[var(--text-secondary)]" />}
-                        <Layers className="w-3.5 h-3.5 text-[#325B6D]" /><span>{sch.name}</span>
-                      </button>
+                      <div className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[var(--bg-hover)] text-sm transition-colors">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); selectAllInSchema(cat.name, sch.name) }}
+                          title={allSelected ? 'Deselect all tables in schema' : 'Select all tables in schema'}
+                          className={`shrink-0 rounded border flex items-center justify-center transition-colors ${
+                            allSelected
+                              ? 'bg-[#6366F1] border-[#6366F1]'
+                              : someSelected
+                                ? 'bg-[#6366F1]/30 border-[#6366F1]'
+                                : 'border-[var(--border)] hover:border-[#6366F1]'
+                          }`}
+                          style={{ width: 18, height: 18 }}
+                        >
+                          {allSelected && <Check className="w-3 h-3 text-white" />}
+                          {someSelected && <Minus className="w-3 h-3 text-[#6366F1]" />}
+                        </button>
+                        <button onClick={() => toggleSchema(cat.name, sch.name)} className="flex-1 flex items-center gap-2 text-left">
+                          {loadingNodes.has(sk) ? <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--text-secondary)]" /> : expandedSchemas.has(sk) ? <ChevronDown className="w-3.5 h-3.5 text-[var(--text-secondary)]" /> : <ChevronRight className="w-3.5 h-3.5 text-[var(--text-secondary)]" />}
+                          <Layers className="w-3.5 h-3.5 text-[#3B82F6]" /><span>{sch.name}</span>
+                        </button>
+                      </div>
                       {expandedSchemas.has(sk) && tables[sk]?.map((tbl: Table) => {
                         const isSel = selectedTables.includes(tbl.full_name)
                         return (
                           <button key={tbl.name} onClick={() => toggleTable(tbl.full_name)} className="w-full ml-4 flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[var(--bg-hover)] text-sm transition-colors">
-                            <div className={`shrink-0 rounded border flex items-center justify-center ${isSel ? 'bg-[#D0A33C] border-[#D0A33C]' : 'border-[var(--border)]'}`} style={{ width: 18, height: 18 }}>
+                            <div className={`shrink-0 rounded border flex items-center justify-center ${isSel ? 'bg-[#6366F1] border-[#6366F1]' : 'border-[var(--border)]'}`} style={{ width: 18, height: 18 }}>
                               {isSel && <Check className="w-3 h-3 text-white" />}
                             </div>
                             <Table2 className="w-3.5 h-3.5 text-emerald-500" /><span className="truncate">{tbl.name}</span>
@@ -1330,14 +1740,14 @@ function CatalogPicker({
               </div>
             ))}
             {visibleCount < filteredCatalogs.length && (
-              <button onClick={() => setVisibleCount((c: number) => c + 50)} className="w-full py-2 text-xs text-[#D0A33C] font-medium">Show more ({filteredCatalogs.length - visibleCount})</button>
+              <button onClick={() => setVisibleCount((c: number) => c + 50)} className="w-full py-2 text-xs text-[#6366F1] font-medium">Show more ({filteredCatalogs.length - visibleCount})</button>
             )}
           </>
         )}
       </div>
       <div className="px-3 py-2 border-t border-[var(--border)] bg-[var(--bg-tertiary)] flex items-center justify-between">
         <span className="text-xs text-[var(--text-secondary)]">{selectedTables.length} selected</span>
-        <button onClick={onClose} className="text-xs font-medium text-[#D0A33C] hover:text-[#D0A33C]">Done</button>
+        <button onClick={onClose} className="text-xs font-medium text-[#6366F1] hover:text-[#6366F1]">Done</button>
       </div>
     </div>
   )
