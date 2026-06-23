@@ -3,6 +3,15 @@ from databricks.sdk import WorkspaceClient
 
 IS_DATABRICKS_APP = bool(os.environ.get("DATABRICKS_APP_NAME"))
 
+# On-behalf-of-user master switch. OBO requires each user's forwarded token to
+# carry the requested OAuth scopes (sql, dashboards.genie, catalog.catalogs, …),
+# which only happens once the user consents to that exact scope set. When scopes
+# are added to an already-consented app, the delta scopes don't reliably activate
+# for existing users, so OBO calls 403. Default OFF: all calls use the service
+# principal (which has the app's mirrored UC/Genie/warehouse grants). Set
+# OBO_ENABLED=true in app.yaml once user-authorization consent is confirmed.
+OBO_ENABLED = os.environ.get("OBO_ENABLED", "false").lower() in ("1", "true", "yes", "on")
+
 # Reuse a single service-principal WorkspaceClient to avoid repeated SDK init.
 _workspace_client: WorkspaceClient | None = None
 
@@ -30,7 +39,7 @@ def get_user_token(request) -> str | None:
     scopes declared in app.yaml. Returns None in local dev or if the header is
     absent, so callers can fall back to the service principal.
     """
-    if request is None or not IS_DATABRICKS_APP:
+    if not OBO_ENABLED or request is None or not IS_DATABRICKS_APP:
         return None
     return request.headers.get("X-Forwarded-Access-Token") or None
 

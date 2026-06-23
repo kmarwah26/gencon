@@ -37,6 +37,12 @@ resources:
       database: genco
 
 env:
+  # On-behalf-of-user master switch. Keep "false" until every user has consented
+  # to the full user_authorization scope set above (otherwise Genie/UC calls 403
+  # for users whose token predates the added scopes). Flip to "true" to run
+  # user-facing Databricks calls as the logged-in user.
+  - name: OBO_ENABLED
+    value: "false"
   - name: PGHOST
     valueFrom: genco-cache-db
   - name: PGPORT
