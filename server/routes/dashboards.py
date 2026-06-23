@@ -78,20 +78,19 @@ async def _ensure_table():
         print(f"[dashboards] Failed to create table: {e}")
 
 
+# Lakeview dashboards always run as the service principal. The Lakeview API
+# requires the `sql.dashboards` OAuth scope, which can't be granted to an
+# existing user's OBO token without an account-console consent reset (the
+# platform won't re-prompt for a delta scope). The SP's own token isn't
+# downscoped, so it can create/publish/share dashboards. Everything else in the
+# app stays on-behalf-of-user; this one path is the documented exception.
 def _client(request: Request | None = None) -> tuple[str, dict]:
-    return get_workspace_host(), get_auth_headers(request)
+    return get_workspace_host(), get_auth_headers()
 
 
 def _user_client(request: Request) -> tuple[str, dict, str]:
-    """Use the user's OBO token when available so Lakeview writes happen as the user.
-
-    Returns (host, headers, auth_mode_label). Falls back to SP if no OBO token.
-    """
-    host = get_workspace_host()
-    obo = get_user_auth_headers(request)
-    if obo:
-        return host, obo, "user (OBO)"
-    return host, get_auth_headers(), "service principal"
+    """Lakeview writes run as the service principal (see module note above)."""
+    return get_workspace_host(), get_auth_headers(), "service principal"
 
 
 async def _get_room_warehouse(room_id: str, request: Request | None = None) -> str:
