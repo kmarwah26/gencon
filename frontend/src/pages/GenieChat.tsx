@@ -1139,8 +1139,11 @@ function MessageActions({ question, sql, queryResult, onSave, onAddSample, onSav
               setDashSaving(true)
               setDashError('')
               try {
-                // Build chart hint so the saved widget mirrors what the user sees in chat
-                const chartHint = showChart && canVisualize ? {
+                // Always save the visual (chart) when the data can be charted —
+                // uses the selected chart type + default series even if the
+                // Visualize panel was never opened. The backend falls back to a
+                // table only when there's nothing numeric to plot.
+                const chartHint = canVisualize && activeSeries.length > 0 ? {
                   widget_type: chartType,
                   label_column: labelIdxForActions >= 0 ? columns[labelIdxForActions] : null,
                   value_columns: activeSeries.map((j) => columns[j]),
