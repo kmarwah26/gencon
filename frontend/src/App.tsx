@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Routes, Route, useNavigate, useLocation, Link } from 'react-router-dom'
 import {
   Database, Plus, MessageSquare, Sparkles, Network,
-  User, ArrowLeft, ArrowRight, Pencil, Trash2, Loader2, FlaskConical,
+  User, ArrowLeft, ArrowRight, Pencil, Trash2, Loader2,
   Zap, TrendingUp,
 } from 'lucide-react'
 import { api } from './api'
@@ -14,10 +14,8 @@ import GenieRooms from './pages/GenieRooms'
 import GenieChat from './pages/GenieChat'
 import SupervisorChat from './pages/SupervisorChat'
 import Services from './pages/Services'
-import SampleDataGenerator from './pages/SampleDataGenerator'
 const tiles = [
   { to: '/catalog', icon: Database, label: 'Explore Data', desc: 'See the customer and campaign data available to your team', color: 'from-[#3B82F6] to-[#4338CA]' },
-  { to: '/sample-data', icon: FlaskConical, label: 'Demo Datasets', desc: 'Spin up realistic sample data for demos and trials', color: 'from-violet-500 to-fuchsia-600' },
   { to: '/create', icon: Plus, label: 'New Assistant', desc: 'Set up an AI assistant for a new dataset', color: 'from-[#6366F1] to-[#A855F7]' },
   { to: '/rooms', icon: MessageSquare, label: 'Ask Questions', desc: 'Chat with your data and get instant answers', color: 'from-[#22D3EE] to-[#3B82F6]' },
   { to: '/edit', icon: Pencil, label: 'Manage Assistants', desc: 'Update and fine-tune your assistants', color: 'from-[#F472B6] to-[#FB7185]' },
@@ -90,7 +88,6 @@ export default function App() {
           <Route path="/edit" element={<EditRoomPicker />} />
           <Route path="/edit/:roomId" element={<EditRoom />} />
           <Route path="/supervisor" element={<SupervisorChat />} />
-          <Route path="/sample-data" element={<SampleDataGenerator />} />
           <Route path="/services" element={<Services />} />
         </Routes>
       </main>
