@@ -27,8 +27,12 @@ user_authorization:
     - sql.warehouses   # Warehouse list/start
     - catalog.catalogs # Unity Catalog browse: catalogs/schemas/tables, description validation, filter columns
     - dashboards.genie # Genie rooms: list/create/edit/delete, conversations, query results
-    - dashboards       # Lakeview dashboards: create/publish/share/embed (distinct from dashboards.genie)
+    - sql.dashboards   # Lakeview dashboards: create/publish/share/embed
     - files            # Workspace files browser (list/export notebooks & SQL files)
+  # NOTE: for an existing app these scopes are NOT applied from app.yaml — they
+  # are managed via the app's Authorization config (UI or `databricks apps update
+  # --json '{"user_api_scopes": [...]}'`). This block documents the intended set;
+  # changing it here alone has no effect. Users must re-consent after scopes change.
 
 resources:
   - name: genco-cache-db
