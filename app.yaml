@@ -8,6 +8,27 @@ command:
   - "--port"
   - "8000"
 
+# On-behalf-of-user (OBO) authentication: the app receives the logged-in user's
+# OAuth token via the X-Forwarded-Access-Token header and uses it for all
+# user-facing Databricks calls, so they run with the user's own Unity Catalog /
+# workspace permissions (row filters, column masks, grants) rather than the
+# service principal's. See server/config.py (get_workspace_client / get_auth_headers).
+#
+# Background/shared work stays on the service principal: Lakebase connection,
+# semantic-cache embeddings + LLM serving calls, the shared catalog/room cache
+# sync, the supervisor's LangChain Genie agent, and the /services diagnostics.
+#
+# The default workspace allowlist is "All APIs"; an admin can restrict it under
+# Settings > Development > Apps. The auto-granted iam.* scopes (current-user,
+# access-control:read) cover identity lookups.
+user_authorization:
+  scopes:
+    - sql              # SQL Statement API: EDA, sample-data gen, KPI exec, filter queries, execute-sql
+    - sql.warehouses   # Warehouse list/start
+    - catalog.catalogs # Unity Catalog browse: catalogs/schemas/tables, description validation, filter columns
+    - dashboards.genie # Genie rooms: list/create/edit/delete, conversations, query results, Lakeview save
+    - files            # Workspace files browser (list/export notebooks & SQL files)
+
 resources:
   - name: genco-cache-db
     type: database

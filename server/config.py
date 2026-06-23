@@ -3,11 +3,16 @@ from databricks.sdk import WorkspaceClient
 
 IS_DATABRICKS_APP = bool(os.environ.get("DATABRICKS_APP_NAME"))
 
-# Reuse a single WorkspaceClient instance to avoid repeated SDK initialization
+# Reuse a single service-principal WorkspaceClient to avoid repeated SDK init.
 _workspace_client: WorkspaceClient | None = None
 
 
-def get_workspace_client() -> WorkspaceClient:
+def _get_sp_client() -> WorkspaceClient:
+    """Cached service-principal (or local profile) WorkspaceClient.
+
+    Used for background/shared work that isn't tied to a user request, and as the
+    fallback whenever no user OAuth token is available.
+    """
     global _workspace_client
     if _workspace_client is None:
         if IS_DATABRICKS_APP:
@@ -18,17 +23,59 @@ def get_workspace_client() -> WorkspaceClient:
     return _workspace_client
 
 
+def get_user_token(request) -> str | None:
+    """The logged-in user's OAuth token, forwarded by Databricks Apps.
+
+    Present only when running as a Databricks App with `user_authorization`
+    scopes declared in app.yaml. Returns None in local dev or if the header is
+    absent, so callers can fall back to the service principal.
+    """
+    if request is None or not IS_DATABRICKS_APP:
+        return None
+    return request.headers.get("X-Forwarded-Access-Token") or None
+
+
+def get_workspace_client(request=None) -> WorkspaceClient:
+    """Return a WorkspaceClient for Databricks SDK calls.
+
+    On-behalf-of-user: when `request` carries the user's forwarded OAuth token,
+    return a client authenticated as that user so the call runs with their Unity
+    Catalog / workspace permissions. Otherwise (local dev, missing header, or no
+    request) return the cached service-principal client.
+    """
+    token = get_user_token(request)
+    if token:
+        return WorkspaceClient(host=get_workspace_host(), token=token)
+    return _get_sp_client()
+
+
 def get_workspace_host() -> str:
     if IS_DATABRICKS_APP:
         host = os.environ.get("DATABRICKS_HOST", "")
         if host and not host.startswith("http"):
             host = f"https://{host}"
         return host
-    client = get_workspace_client()
-    return client.config.host
+    return _get_sp_client().config.host
 
 
-def get_auth_headers() -> dict:
-    client = get_workspace_client()
-    headers = client.config.authenticate()
-    return headers
+def get_auth_headers(request=None) -> dict:
+    """Return REST Authorization headers.
+
+    On-behalf-of-user: prefer the user's forwarded OAuth token so REST calls run
+    with their permissions. Falls back to the service principal when no user
+    token is available (local dev or missing header).
+    """
+    token = get_user_token(request)
+    if token:
+        return {"Authorization": f"Bearer {token}"}
+    return _get_sp_client().config.authenticate()
+
+
+def get_user_auth_headers(request) -> dict | None:
+    """User-only OBO headers, or None when no user token is available.
+
+    Kept for callers that need to distinguish OBO from SP explicitly. Most code
+    should prefer get_auth_headers(request), which falls back to the SP.
+    """
+    token = get_user_token(request)
+    return {"Authorization": f"Bearer {token}"} if token else None

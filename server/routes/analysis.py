@@ -1,8 +1,8 @@
 import json
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from openai import AsyncOpenAI
-from server.config import get_workspace_client, get_workspace_host, get_auth_headers
+from server.config import get_workspace_client, get_workspace_host, get_auth_headers, get_user_auth_headers
 import httpx
 
 router = APIRouter(tags=["analysis"])
@@ -38,32 +38,44 @@ class UpdateColumnDescriptionRequest(BaseModel):
 # ── Update descriptions via SQL ──
 
 
-@router.post("/analysis/update-table-description")
-async def update_table_description(req: UpdateDescriptionRequest):
-    """Update a table's comment/description using SQL."""
+async def _run_alter_sql(request: Request, warehouse_id: str, sql: str) -> None:
+    """Execute an ALTER/COMMENT statement on behalf of the logged-in user.
+
+    Uses the user's forwarded OAuth token when available so the user's Unity
+    Catalog permissions apply (not the service principal's). Falls back to the
+    SP token for local dev or if the header is missing.
+    """
     host = get_workspace_host()
-    headers = get_auth_headers()
-    # Escape single quotes in comment
+    user_headers = get_user_auth_headers(request)
+    headers = user_headers or get_auth_headers()
+    auth_mode = "user (OBO)" if user_headers else "service principal"
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            f"{host}/api/2.0/sql/statements",
+            headers=headers,
+            json={
+                "warehouse_id": warehouse_id,
+                "statement": sql,
+                "wait_timeout": "15s",
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        status = data.get("status", {}).get("state", "")
+        if status == "FAILED":
+            err = data.get("status", {}).get("error", {}).get("message", "Unknown error")
+            raise HTTPException(status_code=400, detail=f"[{auth_mode}] {err}")
+
+
+@router.post("/analysis/update-table-description")
+async def update_table_description(req: UpdateDescriptionRequest, request: Request):
+    """Update a table's comment using SQL, on behalf of the logged-in user."""
     safe_comment = req.comment.replace("'", "''")
     sql = f"COMMENT ON TABLE {req.full_name} IS '{safe_comment}'"
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                f"{host}/api/2.0/sql/statements",
-                headers=headers,
-                json={
-                    "warehouse_id": req.warehouse_id,
-                    "statement": sql,
-                    "wait_timeout": "15s",
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            status = data.get("status", {}).get("state", "")
-            if status == "FAILED":
-                err = data.get("status", {}).get("error", {}).get("message", "Unknown error")
-                raise HTTPException(status_code=400, detail=err)
-            return {"status": "ok", "full_name": req.full_name}
+        await _run_alter_sql(request, req.warehouse_id, sql)
+        return {"status": "ok", "full_name": req.full_name}
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except HTTPException:
@@ -73,30 +85,13 @@ async def update_table_description(req: UpdateDescriptionRequest):
 
 
 @router.post("/analysis/update-column-description")
-async def update_column_description(req: UpdateColumnDescriptionRequest):
-    """Update a column's comment/description using SQL."""
-    host = get_workspace_host()
-    headers = get_auth_headers()
+async def update_column_description(req: UpdateColumnDescriptionRequest, request: Request):
+    """Update a column's comment using SQL, on behalf of the logged-in user."""
     safe_comment = req.comment.replace("'", "''")
     sql = f"ALTER TABLE {req.full_name} ALTER COLUMN `{req.column_name}` COMMENT '{safe_comment}'"
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                f"{host}/api/2.0/sql/statements",
-                headers=headers,
-                json={
-                    "warehouse_id": req.warehouse_id,
-                    "statement": sql,
-                    "wait_timeout": "15s",
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            status = data.get("status", {}).get("state", "")
-            if status == "FAILED":
-                err = data.get("status", {}).get("error", {}).get("message", "Unknown error")
-                raise HTTPException(status_code=400, detail=err)
-            return {"status": "ok", "full_name": req.full_name, "column": req.column_name}
+        await _run_alter_sql(request, req.warehouse_id, sql)
+        return {"status": "ok", "full_name": req.full_name, "column": req.column_name}
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except HTTPException:
@@ -171,9 +166,9 @@ async def generate_descriptions(req: GenerateDescriptionsRequest):
 
 
 @router.post("/analysis/validate-descriptions")
-async def validate_descriptions(req: TableListRequest):
+async def validate_descriptions(req: TableListRequest, request: Request):
     """Check each table and its columns for missing descriptions."""
-    w = get_workspace_client()
+    w = get_workspace_client(request)
     results = []
 
     for full_name in req.table_identifiers:
@@ -244,9 +239,9 @@ async def validate_descriptions(req: TableListRequest):
 # ── Shared helpers ──
 
 
-def _gather_table_metadata(table_identifiers: list[str]):
-    """Fetch metadata for a list of tables via Unity Catalog SDK."""
-    w = get_workspace_client()
+def _gather_table_metadata(request: Request, table_identifiers: list[str]):
+    """Fetch metadata for a list of tables via Unity Catalog SDK (as the user)."""
+    w = get_workspace_client(request)
     table_summaries = []
     for full_name in table_identifiers:
         try:
@@ -272,10 +267,10 @@ def _gather_table_metadata(table_identifiers: list[str]):
     return table_summaries
 
 
-async def _run_sql(warehouse_id: str, statement: str):
-    """Execute a SQL statement via the SQL Statement API."""
+async def _run_sql(request: Request, warehouse_id: str, statement: str):
+    """Execute a SQL statement via the SQL Statement API (as the user)."""
     host = get_workspace_host()
-    headers = get_auth_headers()
+    headers = get_auth_headers(request)
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
             f"{host}/api/2.0/sql/statements",
@@ -295,9 +290,9 @@ async def _run_sql(warehouse_id: str, statement: str):
 
 
 @router.post("/analysis/summary-stats")
-async def summary_stats(req: TableListRequest):
+async def summary_stats(req: TableListRequest, request: Request):
     """Get summary stats: row counts, column type distribution per table."""
-    table_summaries = _gather_table_metadata(req.table_identifiers)
+    table_summaries = _gather_table_metadata(request, req.table_identifiers)
 
     results = []
     for ts in table_summaries:
@@ -325,6 +320,7 @@ async def summary_stats(req: TableListRequest):
         if req.warehouse_id:
             try:
                 data = await _run_sql(
+                    request,
                     req.warehouse_id,
                     f"SELECT COUNT(*) as cnt FROM {ts['full_name']}",
                 )
@@ -341,7 +337,7 @@ async def summary_stats(req: TableListRequest):
 
 
 @router.post("/analysis/time-ranges")
-async def time_ranges(req: TableListRequest):
+async def time_ranges(req: TableListRequest, request: Request):
     """Detect date/timestamp columns and query their min/max values."""
     if not req.warehouse_id:
         raise HTTPException(
@@ -349,7 +345,7 @@ async def time_ranges(req: TableListRequest):
             detail="A SQL warehouse is required to detect time ranges.",
         )
 
-    table_summaries = _gather_table_metadata(req.table_identifiers)
+    table_summaries = _gather_table_metadata(request, req.table_identifiers)
     results = []
 
     for ts in table_summaries:
@@ -383,7 +379,7 @@ async def time_ranges(req: TableListRequest):
                     f"FROM {ts['full_name']} "
                     f"WHERE `{col['name']}` IS NOT NULL"
                 )
-                data = await _run_sql(req.warehouse_id, sql)
+                data = await _run_sql(request, req.warehouse_id, sql)
                 min_val, max_val = None, None
                 if data:
                     rows = data.get("result", {}).get("data_array", [])
@@ -415,9 +411,9 @@ async def time_ranges(req: TableListRequest):
 
 
 @router.post("/analysis/dataset-description")
-async def dataset_description(req: TableListRequest):
+async def dataset_description(req: TableListRequest, request: Request):
     """Generate a concise dataset description suitable for Genie room instructions."""
-    table_summaries = _gather_table_metadata(req.table_identifiers)
+    table_summaries = _gather_table_metadata(request, req.table_identifiers)
 
     # Get row counts if warehouse available
     row_counts = {}
@@ -427,6 +423,7 @@ async def dataset_description(req: TableListRequest):
                 continue
             try:
                 data = await _run_sql(
+                    request,
                     req.warehouse_id,
                     f"SELECT COUNT(*) as cnt FROM {ts['full_name']}",
                 )
@@ -488,13 +485,85 @@ async def dataset_description(req: TableListRequest):
     return {"description": description}
 
 
+@router.post("/analysis/suggest-questions")
+async def suggest_questions(req: TableListRequest, request: Request):
+    """Generate 6-8 starter questions a business user might ask about these tables."""
+    table_summaries = _gather_table_metadata(request, req.table_identifiers)
+
+    # Build compact schema context (no row counts — we want fast suggestions)
+    context_parts = []
+    for ts in table_summaries:
+        if ts.get("error"):
+            continue
+        part = f"Table: {ts['full_name']}"
+        if ts.get("comment"):
+            part += f" — {ts['comment']}"
+        part += "\nColumns: " + ", ".join(
+            f"{c['name']} ({c['type']})" for c in ts.get("columns", [])[:30]
+        )
+        context_parts.append(part)
+    context = "\n\n".join(context_parts) or "(no schema available)"
+
+    prompt = (
+        "You are helping a business user explore a dataset via natural-language questions. "
+        "Given the schema below, propose 6 starter questions they could ask. "
+        "Each question must:\n"
+        "- Be answerable from the available columns (don't invent data).\n"
+        "- Sound natural, like something a manager would type. Not 'SELECT'-y.\n"
+        "- Range from simple counts/breakdowns to mildly analytical (trends, top-N, comparisons).\n\n"
+        "Respond as a JSON object: "
+        '{"questions": [{"title": "...", "hint": "..."}]}. '
+        '"title" is the question itself (max ~12 words). "hint" is a 5-8 word phrase '
+        'describing what type of analysis it is (e.g. "Time-series trend", "Top-N ranking", '
+        '"Distribution"). No prose outside the JSON.\n\n'
+        f"Schema:\n\n{context}"
+    )
+
+    client = _llm_client()
+    try:
+        # Some Databricks model endpoints don't accept response_format json_object —
+        # ask for raw JSON in the prompt and strip any markdown fences ourselves.
+        resp = await client.chat.completions.create(
+            model=DEFAULT_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=1024,
+            temperature=0.4,
+        )
+        raw = (resp.choices[0].message.content or "").strip()
+        # Strip markdown code fences if present
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
+            if raw.endswith("```"):
+                raw = raw[:-3].strip()
+        # Find the first { and last } to be lenient
+        s = raw.find("{")
+        e = raw.rfind("}")
+        if s >= 0 and e > s:
+            raw = raw[s:e + 1]
+        try:
+            parsed = json.loads(raw)
+        except Exception:
+            parsed = {}
+        questions = parsed.get("questions", []) or []
+        cleaned = []
+        for q in questions[:8]:
+            title = (q.get("title") or "").strip()
+            hint = (q.get("hint") or "").strip()
+            if title:
+                cleaned.append({"title": title, "hint": hint})
+        return {"questions": cleaned}
+    except Exception as e:
+        print(f"[suggest-questions] LLM error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Legacy EDA endpoint (kept for backward compatibility)
 
 
 @router.post("/analysis/eda")
-async def eda_analysis(req: TableListRequest):
+async def eda_analysis(req: TableListRequest, request: Request):
     """Run metadata analysis and generate an LLM summary of selected tables."""
-    table_summaries = _gather_table_metadata(req.table_identifiers)
+    table_summaries = _gather_table_metadata(request, req.table_identifiers)
 
     row_counts = {}
     if req.warehouse_id:
@@ -503,6 +572,7 @@ async def eda_analysis(req: TableListRequest):
                 continue
             try:
                 data = await _run_sql(
+                    request,
                     req.warehouse_id,
                     f"SELECT COUNT(*) as cnt FROM {ts['full_name']}",
                 )

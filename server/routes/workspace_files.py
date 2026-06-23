@@ -1,5 +1,5 @@
 import base64
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from server.config import get_workspace_client, get_workspace_host, get_auth_headers
 import httpx
 
@@ -7,10 +7,10 @@ router = APIRouter(tags=["workspace-files"])
 
 
 @router.get("/workspace/list")
-async def list_workspace_path(path: str = Query("/", description="Workspace path to list")):
+async def list_workspace_path(request: Request, path: str = Query("/", description="Workspace path to list")):
     """List files and directories in a workspace path."""
     host = get_workspace_host()
-    headers = get_auth_headers()
+    headers = get_auth_headers(request)
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(
@@ -49,10 +49,10 @@ async def list_workspace_path(path: str = Query("/", description="Workspace path
 
 
 @router.get("/workspace/read")
-async def read_workspace_file(path: str = Query(..., description="Workspace file path")):
+async def read_workspace_file(request: Request, path: str = Query(..., description="Workspace file path")):
     """Read the content of a workspace file or notebook."""
     host = get_workspace_host()
-    headers = get_auth_headers()
+    headers = get_auth_headers(request)
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(
