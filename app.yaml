@@ -47,7 +47,7 @@ env:
   # for users whose token predates the added scopes). Flip to "true" to run
   # user-facing Databricks calls as the logged-in user.
   - name: OBO_ENABLED
-    value: "true"
+    value: "false"
   - name: PGHOST
     valueFrom: genco-cache-db
   - name: PGPORT
