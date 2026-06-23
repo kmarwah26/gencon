@@ -54,7 +54,10 @@ def get_workspace_client(request=None) -> WorkspaceClient:
     """
     token = get_user_token(request)
     if token:
-        return WorkspaceClient(host=get_workspace_host(), token=token)
+        # auth_type="pat" pins bearer-token auth so the SDK doesn't also pick up
+        # the service principal's OAuth client_id/secret from the Apps environment,
+        # which would raise "more than one authorization method configured".
+        return WorkspaceClient(host=get_workspace_host(), token=token, auth_type="pat")
     return _get_sp_client()
 
 
