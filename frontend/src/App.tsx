@@ -3,7 +3,7 @@ import { Routes, Route, useNavigate, useLocation, Link } from 'react-router-dom'
 import {
   Database, Plus, MessageSquare, Sparkles, Network,
   User, ArrowLeft, ArrowRight, Pencil, Trash2, Loader2, FlaskConical,
-  Zap, TrendingUp,
+  Zap, TrendingUp, RefreshCw,
 } from 'lucide-react'
 import { api } from './api'
 import type { CurrentUser } from './api'
@@ -135,6 +135,13 @@ function Home({ user }: { user: CurrentUser | null }) {
           >
             <Plus className="w-4 h-4" /> Create an assistant
           </button>
+          <button
+            onClick={() => window.location.reload()}
+            title="Refresh your Databricks session — re-authenticates and reloads your data"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-sm font-medium transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" /> Re-authenticate
+          </button>
         </div>
       </div>
 
@@ -181,13 +188,16 @@ function EditRoomPicker() {
   const navigate = useNavigate()
 
   useEffect(() => {
+    const loadLive = () =>
+      api.listGenieRooms()
+        .then((r) => { setRooms(r.rooms); setLoading(false) })
+        .catch((e) => { setError(e.message); setLoading(false) })
     api.cachedRooms()
-      .then((r) => { setRooms(r.rooms); setLoading(false) })
-      .catch(() => {
-        api.listGenieRooms()
-          .then((r) => { setRooms(r.rooms); setLoading(false) })
-          .catch((e) => { setError(e.message); setLoading(false) })
+      .then((r) => {
+        if (r.rooms.length > 0) { setRooms(r.rooms); setLoading(false) }
+        else loadLive()  // empty cache — fall through to the live API
       })
+      .catch(loadLive)
   }, [])
 
   return (

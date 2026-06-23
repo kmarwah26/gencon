@@ -14,23 +14,29 @@ export default function GenieRooms() {
   const [source, setSource] = useState<'cache' | 'live' | ''>('')
 
   useEffect(() => {
-    // Try cache first, fall back to live API
+    // Use the live (per-user) Genie list as the source of truth; the cache is
+    // only an optimization and may be empty if it was never synced.
+    const loadLive = () =>
+      api.listGenieRooms()
+        .then((roomsResp) => {
+          setRooms(roomsResp.rooms)
+          setSource('live')
+          setLoading(false)
+        })
+        .catch((e) => { setError(e.message); setLoading(false) })
+
     api.cachedRooms()
       .then((cached) => {
-        setRooms(cached.rooms)
-        setSource('cache')
-        setLoading(false)
+        if (cached.rooms.length > 0) {
+          setRooms(cached.rooms)
+          setSource('cache')
+          setLoading(false)
+        } else {
+          // Empty cache — fall through to the live API
+          loadLive()
+        }
       })
-      .catch(() => {
-        // Cache unavailable — use live API
-        api.listGenieRooms()
-          .then((roomsResp) => {
-            setRooms(roomsResp.rooms)
-            setSource('live')
-            setLoading(false)
-          })
-          .catch((e) => { setError(e.message); setLoading(false) })
-      })
+      .catch(loadLive)
   }, [])
 
   const filteredRooms = useMemo(() => {
