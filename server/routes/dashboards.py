@@ -346,6 +346,38 @@ def _dashboard_url(host: str, dashboard_id: str) -> str:
     return f"{host}/dashboardsv3/{dashboard_id}"
 
 
+def _embed_url(host: str, dashboard_id: str) -> str:
+    """URL for embedding a published AI/BI dashboard in an iframe.
+
+    Requires the dashboard to be published and the app's domain to be on the
+    workspace's approved-domains list for dashboard embedding.
+    """
+    return f"{host}/embed/dashboardsv3/{dashboard_id}"
+
+
+async def _publish_lakeview(host: str, headers: dict, dashboard_id: str, warehouse_id: str) -> bool:
+    """Publish a Lakeview dashboard so it can be viewed/embedded. Best-effort.
+
+    Publishes with viewer credentials (embed_credentials=False) so each viewer's
+    own Unity Catalog permissions apply — consistent with this app's OBO posture.
+    Returns True on success, False otherwise (never raises).
+    """
+    if not warehouse_id:
+        return False
+    body = {"warehouse_id": warehouse_id, "embed_credentials": False}
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                f"{host}{LAKEVIEW_PREFIX}/{dashboard_id}/published",
+                headers=headers, json=body,
+            )
+            resp.raise_for_status()
+            return True
+    except Exception as e:
+        print(f"[dashboards] publish failed for {dashboard_id}: {e}")
+        return False
+
+
 def _row_to_dashboard(row, host: str) -> dict:
     return {
         "id": row["id"],
@@ -356,6 +388,7 @@ def _row_to_dashboard(row, host: str) -> dict:
         "owner": row["owner"] or "",
         "created_at": row["created_at"].isoformat(),
         "url": _dashboard_url(host, row["dashboard_id"]),
+        "embed_url": _embed_url(host, row["dashboard_id"]),
     }
 
 
@@ -469,6 +502,9 @@ async def new_dashboard(req: NewDashboardRequest, request: Request):
     if not dashboard_id:
         raise HTTPException(status_code=500, detail="Lakeview create returned no id")
 
+    # Publish so it can be viewed/embedded in-app (best-effort).
+    await _publish_lakeview(host, headers, dashboard_id, warehouse_id)
+
     try:
         async with pool.acquire() as conn:
             existing_count = await conn.fetchval(
@@ -490,6 +526,7 @@ async def new_dashboard(req: NewDashboardRequest, request: Request):
         "name": display_name,
         "is_default": is_default,
         "url": _dashboard_url(host, dashboard_id),
+        "embed_url": _embed_url(host, dashboard_id),
     }
 
 
@@ -598,9 +635,17 @@ async def save_widget(req: SaveWidgetRequest, request: Request):
                 raise HTTPException(status_code=500, detail=f"Saved Lakeview dashboard but failed to record locally: {e}")
             created_new = True
 
+    # Re-publish so the in-app embed reflects the latest widget (best-effort).
+    try:
+        pub_wh = await _get_room_warehouse(req.room_id, request)
+        await _publish_lakeview(host, headers, dashboard_id, pub_wh)
+    except Exception:
+        pass
+
     return {
         "dashboard_id": dashboard_id,
         "url": _dashboard_url(host, dashboard_id),
+        "embed_url": _embed_url(host, dashboard_id),
         "created": created_new,
     }
 
@@ -629,3 +674,39 @@ async def share_dashboard(dashboard_id: str, req: ShareRequest, request: Request
             raise HTTPException(status_code=e.response.status_code, detail=f"Permission set failed: {e.response.text}")
 
     return {"shared_with": emails, "shared": True}
+
+
+@router.post("/dashboards/{dashboard_id}/publish")
+async def publish_dashboard(dashboard_id: str, request: Request):
+    """Publish a dashboard so it can be viewed/embedded in-app.
+
+    Used by the in-app Dashboard tab to ensure older dashboards (created before
+    auto-publish) are published. Resolves the room's warehouse from the local
+    mapping. Returns the embed URL.
+    """
+    await _ensure_table()
+    pool = await db.get_pool()
+    if not pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    host, headers, _auth_mode = _user_client(request)
+    try:
+        async with pool.acquire() as conn:
+            room_id = await conn.fetchval(
+                f"SELECT room_id FROM {TABLE} WHERE dashboard_id = $1 LIMIT 1", dashboard_id,
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    if not room_id:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+
+    warehouse_id = await _get_room_warehouse(room_id, request)
+    if not warehouse_id:
+        raise HTTPException(status_code=400, detail="Room has no warehouse configured")
+
+    published = await _publish_lakeview(host, headers, dashboard_id, warehouse_id)
+    return {
+        "published": published,
+        "embed_url": _embed_url(host, dashboard_id),
+        "url": _dashboard_url(host, dashboard_id),
+    }

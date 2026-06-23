@@ -100,6 +100,79 @@ export interface CurrentUser {
   display_name: string;
 }
 
+export interface FilterColumn {
+  column_name: string;
+  label: string;
+  created_at: string;
+}
+
+export interface UserFilter {
+  user_email: string;
+  principal_type: 'user' | 'group';
+  display_name: string;
+  filters: Record<string, string[]>;
+  updated_at: string;
+}
+
+export interface AvailableColumn {
+  name: string;
+  type: string;
+  tables: string[];
+}
+
+export interface Principal {
+  type: 'user' | 'group';
+  id: string;
+  display_name: string;
+  user_name?: string;
+  email?: string;
+  member_count?: number;
+}
+
+export interface FilterScope {
+  user_email: string;
+  has_columns: boolean;
+  blocked: boolean;
+  values: Record<string, string[]>;
+  columns: { column_name: string; label: string }[];
+}
+
+export interface RoomKpi {
+  id: string;
+  name: string;
+  description: string;
+  sql: string;
+  unit: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KpiExecuteResult {
+  value: any;
+  unit: string;
+  executed_sql: string;
+  executed_at: string;
+}
+
+export interface RoomDashboard {
+  id: string;
+  dashboard_id: string;
+  name: string;
+  is_default: boolean;
+  parent_path: string;
+  owner: string;
+  created_at: string;
+  url: string;
+  embed_url: string;
+}
+
+export interface SaveWidgetResponse {
+  dashboard_id: string;
+  url: string;
+  embed_url: string;
+  created: boolean;
+}
+
 export interface Warehouse {
   id: string;
   name: string;
@@ -151,6 +224,64 @@ export const api = {
     instructions?: string;
   }) => request<GenieRoomDetail>(`/genie/rooms/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteGenieRoom: (id: string) => request<{ deleted: boolean }>(`/genie/rooms/${id}`, { method: 'DELETE' }),
+
+  // Row-level filters (Lakebase)
+  listFilterColumns: (roomId: string) =>
+    request<{ columns: FilterColumn[]; db_available: boolean }>(`/filters/${roomId}/columns`),
+  addFilterColumn: (roomId: string, data: { column_name: string; label?: string }) =>
+    request<{ added: boolean }>(`/filters/${roomId}/columns`, { method: 'POST', body: JSON.stringify(data) }),
+  removeFilterColumn: (roomId: string, columnName: string) =>
+    request<{ deleted: boolean }>(`/filters/${roomId}/columns/${encodeURIComponent(columnName)}`, { method: 'DELETE' }),
+  listUserFilters: (roomId: string) =>
+    request<{ users: UserFilter[]; db_available: boolean }>(`/filters/${roomId}/users`),
+  setUserFilter: (roomId: string, userEmail: string, data: { column_name: string; allowed_values: string[]; principal_type?: 'user' | 'group'; display_name?: string }) =>
+    request<{ saved: boolean }>(`/filters/${roomId}/users/${encodeURIComponent(userEmail)}`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+  listAvailableColumns: (roomId: string) =>
+    request<{ columns: AvailableColumn[]; tables: string[] }>(`/filters/${roomId}/available-columns`),
+  columnsFromTables: (table_identifiers: string[]) =>
+    request<{ columns: AvailableColumn[]; tables: string[] }>('/filters/columns-from-tables', {
+      method: 'POST', body: JSON.stringify({ table_identifiers }),
+    }),
+  searchPrincipals: (q: string, limit = 20) =>
+    request<{ principals: Principal[] }>(`/principals?q=${encodeURIComponent(q)}&limit=${limit}`),
+  deleteUserFilter: (roomId: string, userEmail: string) =>
+    request<{ deleted: boolean }>(`/filters/${roomId}/users/${encodeURIComponent(userEmail)}`, { method: 'DELETE' }),
+  getFilterScope: (roomId: string) =>
+    request<FilterScope>(`/filters/${roomId}/scope`),
+
+  // KPIs (Lakebase)
+  listKpis: (roomId: string) =>
+    request<{ kpis: RoomKpi[]; db_available: boolean }>(`/kpis/${roomId}`),
+  createKpi: (data: { room_id: string; name: string; description?: string; sql: string; unit?: string }) =>
+    request<{ id: string; created: boolean }>('/kpis', { method: 'POST', body: JSON.stringify(data) }),
+  updateKpi: (id: string, data: { name?: string; description?: string; sql?: string; unit?: string }) =>
+    request<{ updated: boolean }>(`/kpis/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteKpi: (id: string) =>
+    request<{ deleted: boolean }>(`/kpis/${id}`, { method: 'DELETE' }),
+  executeKpi: (id: string) =>
+    request<KpiExecuteResult>(`/kpis/${id}/execute`, { method: 'POST' }),
+
+  // Dashboards (Lakeview)
+  listRoomDashboards: (roomId: string) =>
+    request<{ dashboards: RoomDashboard[]; default_id: string | null; db_available: boolean }>(`/dashboards/${roomId}`),
+  newDashboard: (data: { room_id: string; name?: string }) =>
+    request<{ id: string; dashboard_id: string; name: string; is_default: boolean; url: string; embed_url: string }>(
+      '/dashboards/new', { method: 'POST', body: JSON.stringify(data) }
+    ),
+  publishDashboard: (dashboardId: string) =>
+    request<{ published: boolean; embed_url: string; url: string }>(
+      `/dashboards/${dashboardId}/publish`, { method: 'POST' }
+    ),
+  setDefaultDashboard: (localId: string) =>
+    request<{ set_default: boolean }>(`/dashboards/${localId}/set-default`, { method: 'POST' }),
+  saveWidgetToDashboard: (data: { room_id: string; name: string; sql: string; query_result?: any; dashboard_id?: string; chart_hint?: any }) =>
+    request<SaveWidgetResponse>('/dashboards/save-widget', { method: 'POST', body: JSON.stringify(data) }),
+  shareDashboard: (dashboardId: string, userEmails: string[]) =>
+    request<{ shared_with: string[]; shared: boolean }>(`/dashboards/${dashboardId}/share`, {
+      method: 'POST', body: JSON.stringify({ user_emails: userEmails }),
+    }),
 
   // Saved questions (Lakebase)
   listSavedQuestions: (roomId: string) =>
@@ -278,6 +409,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ table_identifiers, warehouse_id }),
     }),
+  suggestQuestions: (table_identifiers: string[]) =>
+    request<{ questions: { title: string; hint: string }[] }>('/analysis/suggest-questions', {
+      method: 'POST',
+      body: JSON.stringify({ table_identifiers }),
+    }),
   generateDescriptions: (data: {
     full_name: string;
     table_name: string;
@@ -338,6 +474,7 @@ export const api = {
     catalog: string; schema_name: string;
     date_start: string; date_end: string; row_count: number;
     warehouse_id: string; include_descriptions?: boolean;
+    category?: string | null;
   }) =>
     request<{ table: string; status: string; sql_preview: string; executed: any[] }>(
       '/sample-data/generate-table', { method: 'POST', body: JSON.stringify(data) }
@@ -454,11 +591,18 @@ export interface SemanticCacheStats {
   most_recent_access: string | null;
 }
 
+export interface SampleIndustryCategory {
+  id: string;
+  label: string;
+  description: string;
+}
+
 export interface SampleIndustry {
   id: string;
   label: string;
   description: string;
   tables: string[];
+  categories: SampleIndustryCategory[];
 }
 
 export interface CachedTable {
