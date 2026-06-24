@@ -11,8 +11,11 @@ databricks-langchain==0.14.0
 langgraph==1.2.6
 langgraph-prebuilt==1.1.0
 langgraph-supervisor==0.0.31
-# Pin transitive deps that broke the langchain-mcp-adapters import chain.
-# `streamable_http_client` only exists in mcp>=1.10; older auto-resolved versions
-# crashed the app on startup when databricks_langchain was imported.
+# Pin the langchain-mcp-adapters / mcp pair — they drift apart and break the import
+# chain that `import databricks_langchain` pulls in (multi_server_mcp_client). mcp 1.12.4
+# exports `streamablehttp_client`; adapters >=0.3.0 import `streamable_http_client` (a
+# name absent from mcp 1.12.x), which 503s the supervisor. databricks-langchain 0.14.0
+# requires adapters>=0.1.13, so cap the upper bound below 0.3.0 to stay on the
+# `streamablehttp_client` API that mcp 1.12.x provides.
 mcp>=1.10.0,<2.0.0
-langchain-mcp-adapters>=0.1.0
+langchain-mcp-adapters>=0.1.13,<0.3.0

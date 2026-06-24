@@ -39,6 +39,33 @@ async def debug_auth(request: Request):
     }
 
 
+@app.get("/api/_debug/deps")
+async def debug_deps():
+    """Diagnostic: report the supervisor/MCP dependency versions and symbols so we can
+    pin a compatible set. Reports installed versions, the actual symbols exported by
+    mcp.client.streamable_http, and the real traceback from importing the supervisor stack."""
+    import importlib, importlib.metadata, traceback
+    out = {"versions": {}, "streamable_http_symbols": None, "import_errors": {}}
+    for pkg in ("mcp", "langchain-mcp-adapters", "databricks-langchain",
+                "databricks-ai-bridge", "langgraph", "langgraph-supervisor", "langgraph-prebuilt"):
+        try:
+            out["versions"][pkg] = importlib.metadata.version(pkg)
+        except Exception as e:
+            out["versions"][pkg] = f"(not found: {e})"
+    try:
+        mod = importlib.import_module("mcp.client.streamable_http")
+        out["streamable_http_symbols"] = [n for n in dir(mod) if not n.startswith("__")]
+    except Exception as e:
+        out["streamable_http_symbols"] = f"(import failed: {e})"
+    for target in ("databricks_langchain", "databricks_langchain.genie", "langgraph_supervisor"):
+        try:
+            importlib.import_module(target)
+            out["import_errors"][target] = "OK"
+        except Exception:
+            out["import_errors"][target] = traceback.format_exc()[-800:]
+    return out
+
+
 @app.get("/api/db-health")
 async def db_health():
     """Diagnostic endpoint for Lakebase connectivity."""
