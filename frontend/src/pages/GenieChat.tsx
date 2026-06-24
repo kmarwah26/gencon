@@ -60,7 +60,7 @@ export default function GenieChat() {
   const [historyLoaded, setHistoryLoaded] = useState(false)
 
   // Sidebar
-  const [sidebarTab, setSidebarTab] = useState<'saved' | 'history' | 'dashboard'>('saved')
+  const [sidebarTab, setSidebarTab] = useState<'saved' | 'history'>('saved')
   const [savedQuestions, setSavedQuestions] = useState<SavedQuestion[]>([])
   const [savedLoading, setSavedLoading] = useState(true)
   const [dbAvailable, setDbAvailable] = useState(true)
@@ -134,17 +134,37 @@ export default function GenieChat() {
     } catch { /* ignore */ }
   }, [roomId])
 
-  const handleSaveToDashboard = useCallback(async (name: string, sql: string, queryResult: any, chartHint?: any) => {
+  const handleSaveToDashboard = useCallback(async (
+    name: string, sql: string, queryResult: any, chartHint?: any,
+    target?: { dashboardId?: string; createNew?: boolean },
+  ) => {
     if (!roomId) throw new Error('No room')
-    const r = await api.saveWidgetToDashboard({ room_id: roomId, name, sql, query_result: queryResult, chart_hint: chartHint })
-    // Refresh list so any newly created default appears in the panel
-    if (r.created) await reloadDashboards()
+    // Resolve the target dashboard: an explicit existing one, a freshly created one, or
+    // (default) let the backend pick the room's default.
+    let dashboardId = target?.dashboardId
+    if (target?.createNew) {
+      const nd = await api.newDashboard({ room_id: roomId })
+      dashboardId = nd.dashboard_id
+    }
+    const r = await api.saveWidgetToDashboard({ room_id: roomId, name, sql, query_result: queryResult, chart_hint: chartHint, dashboard_id: dashboardId })
+    // Refresh list so a newly created default/dashboard appears in the panel
+    if (r.created || target?.createNew) await reloadDashboards()
     // Show the result embedded in-app; drop the publish guard so the new widget appears.
     publishedRef.current.delete(r.dashboard_id)
     setEmbedDashId(r.dashboard_id)
     setMainView('dashboard')
     return r
   }, [roomId, reloadDashboards])
+
+  const handleDeleteDashboard = useCallback(async (localId: string, name: string) => {
+    if (!window.confirm(`Delete dashboard "${name}"? This removes it from Databricks too.`)) return
+    try {
+      await api.deleteDashboard(localId)
+      await reloadDashboards()
+    } catch (e: any) {
+      alert(e.message || 'Failed to delete dashboard')
+    }
+  }, [reloadDashboards])
 
   const handleNewDashboard = useCallback(async () => {
     if (!roomId) return
@@ -499,12 +519,11 @@ export default function GenieChat() {
             )}
           </div>
 
-          {/* Tabs — icon over label so 5 fit comfortably in a 288px sidebar */}
+          {/* Tabs — icon over label. Dashboards live in the main-area Dashboard tab. */}
           <div className="flex bg-[var(--bg-tertiary)] rounded-lg p-0.5 gap-0.5">
             {[
               { id: 'saved' as const, icon: Bookmark, label: 'Saved', onClick: () => setSidebarTab('saved') },
               { id: 'history' as const, icon: Clock, label: 'History', onClick: () => setSidebarTab('history') },
-              { id: 'dashboard' as const, icon: LayoutDashboard, label: 'Dashboard', onClick: () => setSidebarTab('dashboard') },
             ].map((t) => {
               const active = sidebarTab === t.id
               const Icon = t.icon
@@ -591,83 +610,6 @@ export default function GenieChat() {
                     <p className="text-xs text-[var(--text-primary)] leading-snug line-clamp-2">{q}</p>
                   </button>
                 ))
-              )}
-            </div>
-          )}
-
-          {sidebarTab === 'dashboard' && (
-            <div className="p-3 space-y-3">
-              <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-3">
-                <p className="text-[10px] font-semibold text-[var(--text-primary)] mb-2">+ New dashboard</p>
-                <div className="flex gap-1.5">
-                  <input
-                    type="text"
-                    value={newDashName}
-                    onChange={(e) => setNewDashName(e.target.value)}
-                    placeholder="Optional name"
-                    className="flex-1 px-2 py-1.5 rounded bg-[var(--bg-tertiary)] border border-[var(--border)] text-[11px] focus:outline-none focus:border-[#6366F1]"
-                  />
-                  <button
-                    onClick={handleNewDashboard}
-                    disabled={creatingDash}
-                    className="px-2.5 py-1.5 rounded bg-[#6366F1] hover:bg-[#4F46E5] text-white text-[11px] font-medium disabled:opacity-50 flex items-center gap-1"
-                  >
-                    {creatingDash ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-                    Create
-                  </button>
-                </div>
-                <p className="text-[10px] text-[var(--text-secondary)] mt-1.5">
-                  "Save to dashboard" always targets the <span className="text-[#6366F1] font-semibold">default</span>.
-                </p>
-              </div>
-
-              {dashboards.length === 0 ? (
-                <div className="text-center py-8 px-3">
-                  <LayoutDashboard className="w-8 h-8 mx-auto mb-2 opacity-15" />
-                  <p className="text-xs text-[var(--text-secondary)]">No dashboards yet.</p>
-                  <p className="text-[10px] text-[var(--text-secondary)] mt-1">Save a chat answer or create one above.</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {dashboards.map((d) => (
-                    <div key={d.id} className={`rounded-lg border p-3 ${d.is_default ? 'border-[#6366F1]/40 bg-[#6366F1]/5' : 'border-[var(--border)] bg-[var(--bg-primary)]'}`}>
-                      <div className="flex items-start gap-2 mb-2">
-                        <LayoutDashboard className="w-3.5 h-3.5 text-[#6366F1] shrink-0 mt-0.5" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-[var(--text-primary)] truncate">{d.name}</p>
-                          {d.is_default && (
-                            <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#6366F1] text-white">DEFAULT</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex gap-1.5">
-                        <a
-                          href={d.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] text-[10px] font-medium"
-                        >
-                          <ExternalLink className="w-3 h-3" /> Open
-                        </a>
-                        <button
-                          onClick={() => { setShareTargetId(d.dashboard_id); setShareMsg(''); setShareEmails('') }}
-                          className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] text-[10px] font-medium"
-                        >
-                          <Share2 className="w-3 h-3" /> Share
-                        </button>
-                        {!d.is_default && (
-                          <button
-                            onClick={() => handleSetDefault(d.id)}
-                            className="px-2 py-1.5 rounded bg-[var(--bg-tertiary)] hover:bg-[#6366F1]/20 text-[#6366F1] text-[10px] font-medium"
-                            title="Set as default"
-                          >
-                            ★
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
               )}
             </div>
           )}
@@ -849,6 +791,7 @@ export default function GenieChat() {
                           onSave={handleSaveQuestion}
                           onAddSample={handleAddSampleQuestion}
                           onSaveToDashboard={handleSaveToDashboard}
+                          dashboards={dashboards}
                           isSampleQuestion={sampleQueries.some((sq) => sq.question === msg.userQuestion)}
                         />
                       )}
@@ -971,14 +914,38 @@ export default function GenieChat() {
                     </span>
                   )}
                   {embedDash && (
-                    <a
-                      href={embedDash.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="ml-auto flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] text-[11px] font-medium"
-                    >
-                      <ExternalLink className="w-3 h-3" /> Open in Databricks
-                    </a>
+                    <div className="ml-auto flex items-center gap-2">
+                      {!embedDash.is_default && (
+                        <button
+                          onClick={() => handleSetDefault(embedDash.id)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[#6366F1]/20 text-[#6366F1] text-[11px] font-medium"
+                          title="Set as the room's default dashboard"
+                        >
+                          ★ Set default
+                        </button>
+                      )}
+                      <button
+                        onClick={() => { setShareTargetId(embedDash.dashboard_id); setShareMsg(''); setShareEmails('') }}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] text-[11px] font-medium"
+                      >
+                        <Share2 className="w-3 h-3" /> Share
+                      </button>
+                      <a
+                        href={embedDash.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] text-[11px] font-medium"
+                      >
+                        <ExternalLink className="w-3 h-3" /> Open in Databricks
+                      </a>
+                      <button
+                        onClick={() => handleDeleteDashboard(embedDash.id, embedDash.name)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[var(--bg-tertiary)] hover:bg-red-500/15 text-[var(--text-secondary)] hover:text-red-500 text-[11px] font-medium"
+                        title="Delete this dashboard (also removes it from Databricks)"
+                      >
+                        <Trash2 className="w-3 h-3" /> Delete
+                      </button>
+                    </div>
                   )}
                 </div>
                 {/* Embedded dashboard */}
@@ -1050,13 +1017,14 @@ export default function GenieChat() {
   )
 }
 
-function MessageActions({ question, sql, queryResult, onSave, onAddSample, onSaveToDashboard, isSampleQuestion }: {
+function MessageActions({ question, sql, queryResult, onSave, onAddSample, onSaveToDashboard, dashboards, isSampleQuestion }: {
   question: string
   sql: string
   queryResult?: any
   onSave: (question: string, sql: string) => Promise<void>
   onAddSample: (question: string, sql: string) => Promise<void>
-  onSaveToDashboard: (name: string, sql: string, queryResult: any, chartHint?: any) => Promise<{ url: string; created: boolean }>
+  onSaveToDashboard: (name: string, sql: string, queryResult: any, chartHint?: any, target?: { dashboardId?: string; createNew?: boolean }) => Promise<{ url: string; created: boolean }>
+  dashboards: RoomDashboard[]
   isSampleQuestion?: boolean
 }) {
   const [saving, setSaving] = useState(false)
@@ -1068,7 +1036,14 @@ function MessageActions({ question, sql, queryResult, onSave, onAddSample, onSav
   const [dashSaving, setDashSaving] = useState(false)
   const [dashSaved, setDashSaved] = useState<{ url: string; created: boolean } | null>(null)
   const [dashError, setDashError] = useState('')
+  const [tblSaving, setTblSaving] = useState(false)
+  const [tblSaved, setTblSaved] = useState<{ url: string; created: boolean } | null>(null)
+  const [tblError, setTblError] = useState('')
   const [chartType, setChartType] = useState<ChartType>('barV')
+  // Save target: '' = room default, a dashboard_id = existing, '__new__' = new dashboard
+  const [dashTarget, setDashTarget] = useState<string>('')
+  const buildTarget = (): { dashboardId?: string; createNew?: boolean } | undefined =>
+    dashTarget === '__new__' ? { createNew: true } : dashTarget ? { dashboardId: dashTarget } : undefined
 
   const { columns, types, rows } = extractColumnsAndRows(queryResult)
   const canVisualize = columns.length >= 2 && rows.length > 0
@@ -1094,6 +1069,47 @@ function MessageActions({ question, sql, queryResult, onSave, onAddSample, onSav
     }
     finally { setSaving(false) }
   }
+
+  // "Save to dashboard" (chart). Extracted so it can render either in the action row
+  // or, once a chart is produced, right next to the chart in the visualization header.
+  const dashSaveButton = (
+    <button
+      onClick={async () => {
+        setDashSaving(true)
+        setDashError('')
+        try {
+          // Always adds the VISUAL (chart) — uses the selected chart type + default series
+          // even if the Visualize panel was never opened. Falls back to a table only when
+          // there's nothing numeric to plot.
+          const chartHint = canVisualize && activeSeries.length > 0 ? {
+            widget_type: chartType,
+            label_column: labelIdxForActions >= 0 ? columns[labelIdxForActions] : null,
+            value_columns: activeSeries.map((j) => columns[j]),
+          } : null
+          const r = await onSaveToDashboard(question, sql, queryResult, chartHint, buildTarget())
+          setDashSaved({ url: r.url, created: r.created })
+        } catch (e: any) {
+          setDashError(e.message || 'Failed to save to dashboard')
+        } finally { setDashSaving(false) }
+      }}
+      disabled={dashSaving}
+      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+        dashSaved
+          ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+          : dashError
+            ? 'bg-red-500/10 text-red-500 border border-red-500/20'
+            : 'bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[#6366F1] hover:border-[#6366F1]/30'
+      }`}
+      title={dashError || (dashSaved ? `Added to dashboard (${dashSaved.created ? 'created' : 'appended'})` : 'Recreate this exact visual on the room dashboard')}
+    >
+      {dashSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : dashSaved ? <Check className="w-3.5 h-3.5" /> : <LayoutDashboard className="w-3.5 h-3.5" />}
+      {dashSaved ? (
+        <a href={dashSaved.url} target="_blank" rel="noopener noreferrer" className="underline">
+          Open dashboard
+        </a>
+      ) : dashError ? 'Retry' : 'Add visual to dashboard'}
+    </button>
+  )
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
@@ -1132,47 +1148,59 @@ function MessageActions({ question, sql, queryResult, onSave, onAddSample, onSav
         </button>
       )}
 
+      {sql && dashboards.length > 0 && (
+        <select
+          value={dashTarget}
+          onChange={(e) => setDashTarget(e.target.value)}
+          title="Choose which dashboard to add to"
+          className="px-2 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-xs text-[var(--text-secondary)] focus:outline-none focus:border-[#6366F1] max-w-[12rem]"
+        >
+          <option value="">Default dashboard</option>
+          {dashboards.map((d) => (
+            <option key={d.id} value={d.dashboard_id}>{d.name}{d.is_default ? ' (default)' : ''}</option>
+          ))}
+          <option value="__new__">＋ New dashboard</option>
+        </select>
+      )}
+
       {sql && (
         <>
+          {/* Chart save lives here only until a chart is produced; once the Visualize
+              panel is open it moves next to the chart (see VisualizationPanel action). */}
+          {!showChart && dashSaveButton}
+
+          {/* Separate option: add the raw table (all columns) as its own widget. */}
           <button
             onClick={async () => {
-              setDashSaving(true)
-              setDashError('')
+              setTblSaving(true)
+              setTblError('')
               try {
-                // Always save the visual (chart) when the data can be charted —
-                // uses the selected chart type + default series even if the
-                // Visualize panel was never opened. The backend falls back to a
-                // table only when there's nothing numeric to plot.
-                const chartHint = canVisualize && activeSeries.length > 0 ? {
-                  widget_type: chartType,
-                  label_column: labelIdxForActions >= 0 ? columns[labelIdxForActions] : null,
-                  value_columns: activeSeries.map((j) => columns[j]),
-                } : null
-                const r = await onSaveToDashboard(question, sql, queryResult, chartHint)
-                setDashSaved({ url: r.url, created: r.created })
+                // chart_hint=null forces the backend to build a table widget.
+                const r = await onSaveToDashboard(question, sql, queryResult, null, buildTarget())
+                setTblSaved({ url: r.url, created: r.created })
               } catch (e: any) {
-                setDashError(e.message || 'Failed to save to dashboard')
-              } finally { setDashSaving(false) }
+                setTblError(e.message || 'Failed to add table to dashboard')
+              } finally { setTblSaving(false) }
             }}
-            disabled={dashSaving}
+            disabled={tblSaving}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              dashSaved
+              tblSaved
                 ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
-                : dashError
+                : tblError
                   ? 'bg-red-500/10 text-red-500 border border-red-500/20'
                   : 'bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[#6366F1] hover:border-[#6366F1]/30'
             }`}
-            title={dashError || (dashSaved ? `Saved to dashboard (${dashSaved.created ? 'created' : 'appended'})` : 'Save this query as a widget on the room dashboard')}
+            title={tblError || (tblSaved ? `Table added to dashboard (${tblSaved.created ? 'created' : 'appended'})` : 'Add this query as a table widget on the room dashboard')}
           >
-            {dashSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : dashSaved ? <Check className="w-3.5 h-3.5" /> : <LayoutDashboard className="w-3.5 h-3.5" />}
-            {dashSaved ? (
-              <a href={dashSaved.url} target="_blank" rel="noopener noreferrer" className="underline">
+            {tblSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : tblSaved ? <Check className="w-3.5 h-3.5" /> : <Table2 className="w-3.5 h-3.5" />}
+            {tblSaved ? (
+              <a href={tblSaved.url} target="_blank" rel="noopener noreferrer" className="underline">
                 Open dashboard
               </a>
-            ) : dashError ? 'Retry' : 'Save to dashboard'}
+            ) : tblError ? 'Retry' : 'Add table to dashboard'}
           </button>
-          {dashError && (
-            <p className="w-full text-[10px] text-red-500 mt-1 break-words">{dashError}</p>
+          {(dashError || tblError) && (
+            <p className="w-full text-[10px] text-red-500 mt-1 break-words">{dashError || tblError}</p>
           )}
         </>
       )}
@@ -1201,6 +1229,7 @@ function MessageActions({ question, sql, queryResult, onSave, onAddSample, onSav
             setChartType={setChartType}
             activeSeries={activeSeries}
             setActiveSeries={setActiveSeries}
+            action={dashSaveButton}
           />
         </div>
       )}
@@ -1233,7 +1262,7 @@ const CHART_TYPE_META: { id: ChartType; label: string }[] = [
   { id: 'scatter', label: 'Scatter' },
 ]
 
-function VisualizationPanel({ columns, types, rows, chartType, setChartType, activeSeries, setActiveSeries }: {
+function VisualizationPanel({ columns, types, rows, chartType, setChartType, activeSeries, setActiveSeries, action }: {
   columns: string[]
   types: string[]
   rows: any[][]
@@ -1241,6 +1270,7 @@ function VisualizationPanel({ columns, types, rows, chartType, setChartType, act
   setChartType: (t: ChartType) => void
   activeSeries: number[]
   setActiveSeries: (s: number[]) => void
+  action?: React.ReactNode
 }) {
   // Detect numeric columns
   const numericFlags = columns.map((_, j) => {
@@ -1292,6 +1322,7 @@ function VisualizationPanel({ columns, types, rows, chartType, setChartType, act
             <p className="text-[10px] text-[var(--text-secondary)] truncate">by {labelCol}</p>
           </div>
         </div>
+        {action && <div className="shrink-0">{action}</div>}
       </div>
 
       {/* Chart-type tabs */}

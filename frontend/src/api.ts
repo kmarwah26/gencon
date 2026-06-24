@@ -276,6 +276,8 @@ export const api = {
     ),
   setDefaultDashboard: (localId: string) =>
     request<{ set_default: boolean }>(`/dashboards/${localId}/set-default`, { method: 'POST' }),
+  deleteDashboard: (localId: string) =>
+    request<{ deleted: boolean }>(`/dashboards/${localId}`, { method: 'DELETE' }),
   saveWidgetToDashboard: (data: { room_id: string; name: string; sql: string; query_result?: any; dashboard_id?: string; chart_hint?: any }) =>
     request<SaveWidgetResponse>('/dashboards/save-widget', { method: 'POST', body: JSON.stringify(data) }),
   shareDashboard: (dashboardId: string, userEmails: string[]) =>
@@ -328,10 +330,15 @@ export const api = {
       body: JSON.stringify({ content }),
     }),
 
+  getSupervisorConfig: () =>
+    request<{ room_ids: string[]; instructions: string; db_available: boolean }>('/supervisor/config'),
+  saveSupervisorConfig: (data: { room_ids: string[]; instructions: string }) =>
+    request<{ saved: boolean }>('/supervisor/config', { method: 'PUT', body: JSON.stringify(data) }),
   supervisorAsk: (data: {
     question: string;
     room_ids: string[];
     room_descriptions: { id: string; title: string; description: string }[];
+    instructions?: string;
     conversation_state?: Record<string, string>;
     recursion_limit?: number;
   }) =>

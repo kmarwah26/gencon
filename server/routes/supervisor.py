@@ -1,23 +1,87 @@
 import json
 import asyncio
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from databricks_langchain import ChatDatabricks
-from databricks_langchain.genie import GenieAgent
-from langgraph_supervisor import create_supervisor
 from server.config import get_workspace_host, get_auth_headers
+from server.db import db
+from server.routes.filters import _current_user_email
+
+# Lazy-load the langchain stack — its transitive MCP deps occasionally break
+# on Apps redeploys (mcp / langchain-mcp-adapters version skew). Importing at
+# function-call time keeps the rest of the app available even when the supervisor
+# can't load.
+ChatDatabricks = None  # type: ignore
+GenieAgent = None  # type: ignore
+create_supervisor = None  # type: ignore
+
+
+def _ensure_langchain_imports():
+    """Lazily import the supervisor stack; raise a clean 503 if unavailable."""
+    global ChatDatabricks, GenieAgent, create_supervisor
+    if ChatDatabricks is not None and GenieAgent is not None and create_supervisor is not None:
+        return
+    try:
+        from databricks_langchain import ChatDatabricks as _Chat  # noqa: WPS433
+        from databricks_langchain.genie import GenieAgent as _Genie  # noqa: WPS433
+        from langgraph_supervisor import create_supervisor as _CreateSupervisor  # noqa: WPS433
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Supervisor stack unavailable due to dependency issue: {e}. "
+                   f"Other features still work; please rebuild the app deps to fix.",
+        )
+    ChatDatabricks = _Chat
+    GenieAgent = _Genie
+    create_supervisor = _CreateSupervisor
 
 router = APIRouter(tags=["supervisor"])
 
 LLM_ENDPOINT = "databricks-claude-sonnet-4-5"
+
+# Per-user "Ask Everything" supervisor setup: which rooms the agent can route to and
+# free-text instructions/context. One config row per user (keyed by email). room_ids is
+# stored as a JSON array string for portability (no asyncpg array/JSONB codec needed).
+CONFIG_TABLE = "genco_supervisor_config"
+
+CONFIG_TABLE_SQL = f"""
+CREATE TABLE IF NOT EXISTS {CONFIG_TABLE} (
+    user_email TEXT PRIMARY KEY,
+    room_ids TEXT NOT NULL DEFAULT '[]',
+    instructions TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+"""
+
+_config_table_ready = False
+
+
+async def _ensure_config_table():
+    global _config_table_ready
+    if _config_table_ready:
+        return
+    pool = await db.get_pool()
+    if not pool:
+        return
+    try:
+        async with pool.acquire() as conn:
+            await conn.execute(CONFIG_TABLE_SQL)
+        _config_table_ready = True
+    except Exception as e:
+        print(f"[supervisor] Failed to create config table: {e}")
 
 
 class SupervisorAskRequest(BaseModel):
     question: str
     room_ids: list[str]
     room_descriptions: list[dict]  # [{id, title, description}]
+    instructions: str | None = None  # user-provided context to guide routing + answers
     conversation_state: dict | None = None
     recursion_limit: int = 25
+
+
+class SupervisorConfig(BaseModel):
+    room_ids: list[str] = []
+    instructions: str | None = None
 
 
 class RoutingReasoning(BaseModel):
@@ -31,8 +95,9 @@ class RoutingReasoning(BaseModel):
 # ── Build a supervisor graph for the selected rooms ──
 
 
-def _build_supervisor(rooms: list[dict]):
+def _build_supervisor(rooms: list[dict], instructions: str | None = None):
     """Create a langgraph supervisor with GenieAgent subagents for each room."""
+    _ensure_langchain_imports()
     llm = ChatDatabricks(endpoint=LLM_ENDPOINT)
 
     agents = []
@@ -49,11 +114,21 @@ def _build_supervisor(rooms: list[dict]):
         agents.append(genie)
         agent_descriptions += f"- {name}: {desc}\n"
 
+    # User-provided context/instructions guide BOTH routing and final synthesis.
+    user_context = ""
+    if instructions and instructions.strip():
+        user_context = (
+            "Context and instructions from the user — apply these when deciding which "
+            "agent to route to and when writing the final answer:\n"
+            f"{instructions.strip()}\n\n"
+        )
+
     prompt = (
         "You are a supervisor agent that routes user questions to the most relevant "
         "data agent. Each agent is backed by a Databricks Genie room specialized in "
         "a specific data domain.\n\n"
         f"Available agents:\n{agent_descriptions}\n"
+        f"{user_context}"
         "Route the question to the single best agent. If the question spans multiple "
         "domains, pick the most relevant one first. Always delegate — never try to "
         "answer directly.\n\n"
@@ -176,7 +251,7 @@ async def supervisor_ask(req: SupervisorAskRequest):
         raise HTTPException(status_code=400, detail="At least one room must be selected")
 
     try:
-        supervisor = _build_supervisor(req.room_descriptions)
+        supervisor = _build_supervisor(req.room_descriptions, req.instructions)
 
         # Run the supervisor graph (synchronous langgraph, run in thread)
         limit = max(5, min(req.recursion_limit, 100))
@@ -299,5 +374,58 @@ async def supervisor_ask(req: SupervisorAskRequest):
             "conversation_state": {},
         }
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Persisted per-user supervisor setup (selected rooms + instructions) ──
+
+
+@router.get("/supervisor/config")
+async def get_supervisor_config(request: Request):
+    """Return the current user's saved supervisor setup (rooms + instructions)."""
+    await _ensure_config_table()
+    pool = await db.get_pool()
+    if not pool:
+        return {"room_ids": [], "instructions": "", "db_available": False}
+    user_email = _current_user_email(request).lower()
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                f"SELECT room_ids, instructions FROM {CONFIG_TABLE} WHERE user_email = $1",
+                user_email,
+            )
+        if not row:
+            return {"room_ids": [], "instructions": "", "db_available": True}
+        try:
+            room_ids = json.loads(row["room_ids"]) if row["room_ids"] else []
+        except Exception:
+            room_ids = []
+        return {"room_ids": room_ids, "instructions": row["instructions"] or "", "db_available": True}
+    except Exception as e:
+        print(f"[supervisor] config load error: {e}")
+        return {"room_ids": [], "instructions": "", "db_available": False}
+
+
+@router.put("/supervisor/config")
+async def save_supervisor_config(cfg: SupervisorConfig, request: Request):
+    """Upsert the current user's supervisor setup."""
+    await _ensure_config_table()
+    pool = await db.get_pool()
+    if not pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+    user_email = _current_user_email(request).lower()
+    try:
+        async with pool.acquire() as conn:
+            await conn.execute(
+                f"""INSERT INTO {CONFIG_TABLE} (user_email, room_ids, instructions, updated_at)
+                    VALUES ($1, $2, $3, NOW())
+                    ON CONFLICT (user_email) DO UPDATE
+                    SET room_ids = EXCLUDED.room_ids,
+                        instructions = EXCLUDED.instructions,
+                        updated_at = NOW()""",
+                user_email, json.dumps(cfg.room_ids or []), (cfg.instructions or "").strip(),
+            )
+        return {"saved": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

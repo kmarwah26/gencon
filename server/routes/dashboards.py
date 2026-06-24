@@ -125,6 +125,21 @@ def _lakeview_type(sql_type: str | None) -> str:
     return _TYPE_MAP.get(base, "string")
 
 
+def _scale_type(sql_type: str | None) -> str:
+    """Lakeview chart-axis scale type for a SQL column type.
+
+    Chart encodings use `scale.type` (categorical/quantitative/temporal) — NOT the
+    `type` (string/integer/…) key that table-column encodings use. Mixing them up
+    yields a chart that renders empty.
+    """
+    lv = _lakeview_type(sql_type)
+    if lv in ("integer", "decimal"):
+        return "quantitative"
+    if lv in ("date", "datetime"):
+        return "temporal"
+    return "categorical"
+
+
 # Map frontend chart-type IDs to Lakeview widgetType
 _CHART_TYPE_MAP = {
     "barV": "bar",
@@ -166,85 +181,180 @@ def _build_table_widget(widget_id: str, dataset_name: str, columns: list[dict]) 
     }
 
 
-def _build_chart_widget(widget_id: str, dataset_name: str, chart_hint: dict, columns: list[dict]) -> dict:
-    """Build a non-table Lakeview widget that mirrors the chart the user picked in chat.
+def _flat_dataset(dataset_name: str, dataset_display: str, sql: str) -> dict:
+    """Old-style dataset: raw SQL, results used directly. Used for table widgets."""
+    return {"name": dataset_name, "displayName": dataset_display, "queryLines": [sql]}
 
-    chart_hint = {widget_type: str, label_column: str|None, value_columns: list[str]}
-    Falls back to a table widget if anything is missing or unmappable.
+
+def _metric_view_source(sql: str) -> str:
+    """Wrap a Genie SQL query so it's a valid metric-view source.
+
+    A v1.1 semantic dataset compiles `config.source` as a metric view, whose source must be a
+    table reference or a COMPLETE query with no trailing clauses — a bare `ORDER BY` / `GROUP BY`
+    / `WHERE` / `;` at the tail is rejected with METRIC_VIEW_INVALID_VIEW_DEFINITION. Genie SQL
+    routinely ends with `ORDER BY … ;`, so we strip the trailing semicolon and wrap the whole
+    thing as a subquery, which isolates those clauses. Verified against this workspace's Lakeview.
     """
-    raw_type = (chart_hint or {}).get("widget_type") or "table"
-    lakeview_type = _CHART_TYPE_MAP.get(raw_type, "table")
-    label_col = (chart_hint or {}).get("label_column")
-    value_cols = (chart_hint or {}).get("value_columns") or []
+    cleaned = (sql or "").strip().rstrip(";").strip()
+    return f"SELECT * FROM (\n{cleaned}\n) AS _genco_src"
 
-    # Fall back to table when we don't have enough info or for unmappable types
-    if lakeview_type == "table" or not value_cols:
-        return _build_table_widget(widget_id, dataset_name, columns)
 
-    col_by_name = {c["name"]: c for c in columns}
+def _semantic_dataset(dataset_name: str, dataset_display: str, sql: str,
+                      dimensions: list[dict], measures: list[dict]) -> dict:
+    """v1.1 semantic dataset: the SQL is `config.source`, and the chart groups/aggregates
+    via declared `dimensions` and `measures` (referenced from the widget as `MEASURE(...)`).
 
-    # Build query fields — include label + values
-    fields = []
-    if label_col and label_col in col_by_name:
-        fields.append({"name": label_col, "expression": f"`{label_col}`"})
-    for v in value_cols:
-        if v in col_by_name:
-            fields.append({"name": v, "expression": f"`{v}`"})
-
-    if not fields:
-        return _build_table_widget(widget_id, dataset_name, columns)
-
-    primary_value = value_cols[0]
-
-    # Build encodings per chart type
-    if lakeview_type == "pie":
-        encodings = {
-            "angle": {"fieldName": primary_value, "displayName": primary_value, "type": _lakeview_type(col_by_name.get(primary_value, {}).get("type"))},
-        }
-        if label_col:
-            encodings["color"] = {"fieldName": label_col, "displayName": label_col, "type": "string"}
-    elif lakeview_type == "scatter":
-        # Need x (label or first numeric) and y (primary value)
-        x_field = label_col if label_col and label_col in col_by_name else (value_cols[1] if len(value_cols) > 1 else primary_value)
-        encodings = {
-            "x": {"fieldName": x_field, "displayName": x_field, "type": _lakeview_type(col_by_name.get(x_field, {}).get("type"))},
-            "y": {"fieldName": primary_value, "displayName": primary_value, "type": _lakeview_type(col_by_name.get(primary_value, {}).get("type"))},
-        }
-    else:
-        # bar / line / area — x is label, y is the (first) numeric series
-        x_field = label_col or primary_value
-        encodings = {
-            "x": {"fieldName": x_field, "displayName": x_field, "type": _lakeview_type(col_by_name.get(x_field, {}).get("type"))},
-            "y": {"fieldName": primary_value, "displayName": primary_value, "type": _lakeview_type(col_by_name.get(primary_value, {}).get("type"))},
-        }
-
-    spec: dict = {
-        "version": 3,
-        "widgetType": lakeview_type,
-        "encodings": encodings,
+    This format is REQUIRED for chart widgets to render. The old flat `queryLines` dataset
+    with an inline `SUM()` in the widget query renders an empty chart — verified against this
+    workspace's Lakeview. Tables still use the flat format (they list raw columns, no aggregation).
+    """
+    return {
+        "name": dataset_name,
+        "displayName": dataset_display,
+        "config": {
+            "version": 1.1,
+            "source": _metric_view_source(sql),
+            "dimensions": dimensions,
+            "measures": measures,
+        },
     }
-    # Stacked bar hint
+
+
+def _measure_name(col: str) -> str:
+    base = "".join(ch if (ch.isalnum() or ch == "_") else "_" for ch in col).strip("_")
+    return f"m_{base}" if base else "m_value"
+
+
+def _chart_widget(widget_id: str, dataset_name: str, fields: list[dict], encodings: dict,
+                  lakeview_type: str, raw_type: str, disaggregated: bool) -> dict:
+    spec: dict = {"version": 3, "widgetType": lakeview_type, "encodings": encodings}
     if raw_type == "stacked":
         spec["stack"] = "stack"
-    # Horizontal bar hint
     if raw_type == "barH":
         spec["orientation"] = "horizontal"
-
     return {
         "widget": {
             "name": widget_id,
             "queries": [{
-                "name": f"q_{widget_id}",
+                "name": "main_query",
                 "query": {
                     "datasetName": dataset_name,
                     "fields": fields,
-                    "disaggregated": True,
+                    "disaggregated": disaggregated,
                 },
             }],
             "spec": spec,
         },
         "position": {"x": 0, "y": 0, "width": 6, "height": 6},
     }
+
+
+def _build_chart(widget_id: str, dataset_name: str, dataset_display: str, sql: str,
+                 chart_hint: dict, columns: list[dict]) -> tuple[dict, dict] | None:
+    """Build a (dataset, widget) pair for a non-table chart in the v1.1 semantic format.
+
+    Returns None if the chart isn't buildable (missing label/value cols, unmappable type) —
+    the caller then falls back to a flat-format table.
+
+    chart_hint = {widget_type: str, label_column: str|None, value_columns: list[str]}
+    """
+    raw_type = (chart_hint or {}).get("widget_type") or "table"
+    lakeview_type = _CHART_TYPE_MAP.get(raw_type, "table")
+    if lakeview_type == "table":
+        return None
+
+    label_col = (chart_hint or {}).get("label_column")
+    value_cols = (chart_hint or {}).get("value_columns") or []
+    col_by_name = {c["name"]: c for c in columns}
+    if not value_cols:
+        return None
+    primary_value = value_cols[0]
+    if primary_value not in col_by_name:
+        return None
+    has_label = bool(label_col and label_col in col_by_name)
+
+    def _dim(col):
+        return {"name": col, "expr": f"`{col}`", "displayName": col}
+
+    def _dimfield(col):
+        return {"name": col, "expression": f"`{col}`"}
+
+    if lakeview_type == "scatter":
+        # Raw points on two quantitative axes — no aggregation, so both axes are dimensions.
+        x_col = label_col if has_label else (value_cols[1] if len(value_cols) > 1 and value_cols[1] in col_by_name else primary_value)
+        dims = [_dim(x_col)]
+        fields = [_dimfield(x_col)]
+        if primary_value != x_col:
+            dims.append(_dim(primary_value))
+            fields.append(_dimfield(primary_value))
+        dataset = _semantic_dataset(dataset_name, dataset_display, sql, dims, [])
+        encodings = {
+            "x": {"fieldName": x_col, "displayName": x_col, "scale": {"type": _scale_type(col_by_name.get(x_col, {}).get("type"))}},
+            "y": {"fieldName": primary_value, "displayName": primary_value, "scale": {"type": "quantitative"}},
+        }
+        widget = _chart_widget(widget_id, dataset_name, fields, encodings, lakeview_type, raw_type, disaggregated=True)
+        return dataset, widget
+
+    # bar / line / area / pie need a category dimension to group by. Genie results are already
+    # aggregated (one row per dimension), so the SUM measure returns the value as-is.
+    if not has_label:
+        return None
+
+    valid_values = [v for v in value_cols if v in col_by_name]
+
+    # MULTI-SERIES (2+ numeric columns) for bar/line/area: reshape wide → long (one row per
+    # series) so Lakeview can color/stack by series — mirrors the chat's multi-series visual.
+    # Pie can't show multiple series, so it falls through to the single-series path below.
+    # Verified against this workspace's Lakeview.
+    if lakeview_type in ("bar", "line", "area") and len(valid_values) > 1:
+        clean = (sql or "").strip().rstrip(";").strip()
+        parts = []
+        for vc in valid_values:
+            lit = vc.replace("'", "''")
+            parts.append(
+                f"SELECT `{label_col}` AS series_label, '{lit}' AS series_name, "
+                f"CAST(`{vc}` AS DOUBLE) AS series_value FROM (\n{clean}\n) AS _genco_inner"
+            )
+        long_sql = "\nUNION ALL\n".join(parts)
+        dims = [
+            {"name": "series_label", "expr": "`series_label`", "displayName": label_col},
+            {"name": "series_name", "expr": "`series_name`", "displayName": "Series"},
+        ]
+        measures = [{"name": "m_value", "expr": "SUM(`series_value`)", "displayName": "value"}]
+        dataset = _semantic_dataset(dataset_name, dataset_display, long_sql, dims, measures)
+        mfn = "measure(m_value)"
+        fields = [
+            {"name": "series_label", "expression": "`series_label`"},
+            {"name": "series_name", "expression": "`series_name`"},
+            {"name": mfn, "expression": "MEASURE(`m_value`)"},
+        ]
+        encodings = {
+            "x": {"fieldName": "series_label", "displayName": label_col, "scale": {"type": _scale_type(col_by_name.get(label_col, {}).get("type"))}},
+            "y": {"fieldName": mfn, "displayName": "value", "scale": {"type": "quantitative"}},
+            "color": {"fieldName": "series_name", "displayName": "Series", "scale": {"type": "categorical"}},
+        }
+        widget = _chart_widget(widget_id, dataset_name, fields, encodings, lakeview_type, raw_type, disaggregated=False)
+        return dataset, widget
+
+    measure_name = _measure_name(primary_value)
+    dims = [_dim(label_col)]
+    measures = [{"name": measure_name, "expr": f"SUM(`{primary_value}`)", "displayName": primary_value}]
+    dataset = _semantic_dataset(dataset_name, dataset_display, sql, dims, measures)
+    measure_fieldname = f"measure({measure_name})"
+    fields = [_dimfield(label_col), {"name": measure_fieldname, "expression": f"MEASURE(`{measure_name}`)"}]
+    quant = {"type": "quantitative"}
+    if lakeview_type == "pie":
+        encodings = {
+            "angle": {"fieldName": measure_fieldname, "displayName": primary_value, "scale": quant},
+            "color": {"fieldName": label_col, "displayName": label_col, "scale": {"type": "categorical"}},
+        }
+    else:
+        encodings = {
+            "x": {"fieldName": label_col, "displayName": label_col, "scale": {"type": _scale_type(col_by_name.get(label_col, {}).get("type"))}},
+            "y": {"fieldName": measure_fieldname, "displayName": primary_value, "scale": quant},
+        }
+    widget = _chart_widget(widget_id, dataset_name, fields, encodings, lakeview_type, raw_type, disaggregated=False)
+    return dataset, widget
 
 
 def _next_y(existing_widgets: list[dict]) -> int:
@@ -258,24 +368,27 @@ def _next_y(existing_widgets: list[dict]) -> int:
     return bottom
 
 
-def _make_widget(widget_id: str, dataset_name: str, columns: list[dict], chart_hint: dict | None) -> dict:
+def _make_dataset_and_widget(widget_id: str, dataset_name: str, dataset_display: str, sql: str,
+                             columns: list[dict], chart_hint: dict | None) -> tuple[dict, dict]:
+    """Build a coherent (dataset, widget) pair. Charts use the v1.1 semantic dataset format
+    (required to render); tables and chart fallbacks use the flat queryLines format."""
     if chart_hint:
-        return _build_chart_widget(widget_id, dataset_name, chart_hint, columns)
-    return _build_table_widget(widget_id, dataset_name, columns)
+        chart = _build_chart(widget_id, dataset_name, dataset_display, sql, chart_hint, columns)
+        if chart is not None:
+            return chart
+    return _flat_dataset(dataset_name, dataset_display, sql), _build_table_widget(widget_id, dataset_name, columns)
 
 
 def _build_initial_dashboard(dataset_name: str, dataset_display: str, sql: str, columns: list[dict], chart_hint: dict | None = None) -> str:
     widget_id = f"w_{uuid.uuid4().hex[:8]}"
-    widget = _make_widget(widget_id, dataset_name, columns, chart_hint)
+    dataset, widget = _make_dataset_and_widget(widget_id, dataset_name, dataset_display, sql, columns, chart_hint)
     spec = {
-        "datasets": [{
-            "name": dataset_name,
-            "displayName": dataset_display,
-            "queryLines": [sql],
-        }],
+        "datasets": [dataset],
         "pages": [{
             "name": "main",
             "displayName": "Overview",
+            "pageType": "PAGE_TYPE_CANVAS",
+            "layoutVersion": 2,
             "layout": [widget],
         }],
     }
@@ -284,16 +397,14 @@ def _build_initial_dashboard(dataset_name: str, dataset_display: str, sql: str, 
 
 def _append_widget(serialized: str, dataset_name: str, dataset_display: str, sql: str, columns: list[dict], chart_hint: dict | None = None) -> str:
     spec = json.loads(serialized) if serialized else {}
-    spec.setdefault("datasets", []).append({
-        "name": dataset_name,
-        "displayName": dataset_display,
-        "queryLines": [sql],
-    })
+    widget_id = f"w_{uuid.uuid4().hex[:8]}"
+    dataset, widget = _make_dataset_and_widget(widget_id, dataset_name, dataset_display, sql, columns, chart_hint)
+    spec.setdefault("datasets", []).append(dataset)
     pages = spec.setdefault("pages", [{"name": "main", "displayName": "Overview", "layout": []}])
     page = pages[0]
+    page.setdefault("pageType", "PAGE_TYPE_CANVAS")
+    page.setdefault("layoutVersion", 2)
     layout = page.setdefault("layout", [])
-    widget_id = f"w_{uuid.uuid4().hex[:8]}"
-    widget = _make_widget(widget_id, dataset_name, columns, chart_hint)
     widget["position"]["y"] = _next_y(layout)
     layout.append(widget)
     return json.dumps(spec)
@@ -551,6 +662,60 @@ async def set_default_dashboard(local_id: str):
                     f"UPDATE {TABLE} SET is_default = TRUE WHERE id = $1", local_id,
                 )
         return {"set_default": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _delete_lakeview(host: str, headers: dict, dashboard_id: str) -> bool:
+    """Trash a Lakeview dashboard. Best-effort — returns True on success, never raises.
+
+    A 404 (already gone) counts as success so the local mapping can still be cleaned up.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.delete(f"{host}{LAKEVIEW_PREFIX}/{dashboard_id}", headers=headers)
+            if resp.status_code == 404:
+                return True
+            resp.raise_for_status()
+            return True
+    except Exception as e:
+        print(f"[dashboards] delete failed for {dashboard_id}: {e}")
+        return False
+
+
+@router.delete("/dashboards/{local_id}")
+async def delete_dashboard(local_id: str, request: Request):
+    """Delete a room dashboard: trash the Lakeview dashboard and drop the local mapping.
+
+    If the deleted dashboard was the room default, promote the most recent remaining one.
+    """
+    await _ensure_table()
+    pool = await db.get_pool()
+    if not pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+    host, headers, _auth_mode = _user_client(request)
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                f"SELECT dashboard_id, room_id, is_default FROM {TABLE} WHERE id = $1", local_id,
+            )
+            if not row:
+                raise HTTPException(status_code=404, detail="Dashboard not found")
+            await _delete_lakeview(host, headers, row["dashboard_id"])
+            async with conn.transaction():
+                await conn.execute(f"DELETE FROM {TABLE} WHERE id = $1", local_id)
+                if row["is_default"]:
+                    nxt = await conn.fetchrow(
+                        f"SELECT id FROM {TABLE} WHERE room_id = $1 ORDER BY created_at DESC LIMIT 1",
+                        row["room_id"],
+                    )
+                    if nxt:
+                        await conn.execute(
+                            f"UPDATE {TABLE} SET is_default = TRUE WHERE id = $1", nxt["id"],
+                        )
+        return {"deleted": True}
     except HTTPException:
         raise
     except Exception as e:

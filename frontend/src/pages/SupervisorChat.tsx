@@ -13,6 +13,8 @@ import {
   MessageSquare,
   ArrowRight,
   Database,
+  Save,
+  Settings,
 } from 'lucide-react'
 import { api } from '../api'
 import type { GenieRoom } from '../api'
@@ -47,19 +49,59 @@ export default function SupervisorChat() {
   const [conversationState, setConversationState] = useState<Record<string, string>>({})
   const [panelCollapsed, setPanelCollapsed] = useState(false)
   const [recursionLimit, setRecursionLimit] = useState(25)
+  const [instructions, setInstructions] = useState('')
+  const [savingConfig, setSavingConfig] = useState(false)
+  const [configSaved, setConfigSaved] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    // Try cache first, fall back to live API
-    api.cachedRooms()
-      .then((r) => { setRooms(r.rooms); setLoadingRooms(false) })
-      .catch(() => {
-        api.listGenieRooms()
-          .then((r) => { setRooms(r.rooms); setLoadingRooms(false) })
-          .catch(() => setLoadingRooms(false))
+    // Prefer the live on-behalf-of-user Genie list so the panel reflects the rooms
+    // THIS user can actually see. The SP-synced cache (/cache/rooms) can be empty or
+    // stale, and it returns [] *successfully* — so using it first would wrongly show
+    // "No Genie Rooms found". Fall back to the cache only if the OBO call fails, and to
+    // the cache again if OBO returns an empty list.
+    const useCache = () =>
+      api.cachedRooms()
+        .then((r) => setRooms(r.rooms))
+        .catch(() => {})
+        .finally(() => setLoadingRooms(false))
+
+    api.listGenieRooms()
+      .then((r) => {
+        if (r.rooms && r.rooms.length > 0) {
+          setRooms(r.rooms)
+          setLoadingRooms(false)
+        } else {
+          return useCache()
+        }
       })
+      .catch(() => useCache())
   }, [])
+
+  // Load the saved supervisor setup (selected rooms + instructions) once.
+  useEffect(() => {
+    api.getSupervisorConfig()
+      .then((c) => {
+        if (c.room_ids?.length) setSelectedRooms(new Set(c.room_ids))
+        if (c.instructions) setInstructions(c.instructions)
+      })
+      .catch(() => {})
+  }, [])
+
+  const saveConfig = async () => {
+    setSavingConfig(true)
+    setConfigSaved(false)
+    try {
+      await api.saveSupervisorConfig({ room_ids: Array.from(selectedRooms), instructions })
+      setConfigSaved(true)
+      setTimeout(() => setConfigSaved(false), 2000)
+    } catch (e: any) {
+      alert(e.message || 'Failed to save setup')
+    } finally {
+      setSavingConfig(false)
+    }
+  }
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -92,6 +134,7 @@ export default function SupervisorChat() {
         question,
         room_ids: Array.from(selectedRooms),
         room_descriptions: selectedRoomDescriptions,
+        instructions,
         conversation_state: conversationState,
         recursion_limit: recursionLimit,
       })
@@ -213,6 +256,34 @@ export default function SupervisorChat() {
                   )
                 })
               )}
+            </div>
+
+            {/* Agent instructions + save setup */}
+            <div className="p-3 border-t border-[var(--border)]">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <Settings className="w-3.5 h-3.5 text-[#6366F1]" />
+                <span className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                  Agent Instructions
+                </span>
+              </div>
+              <textarea
+                value={instructions}
+                onChange={(e) => setInstructions(e.target.value)}
+                placeholder="Context to guide routing & answers — e.g. 'Send revenue questions to the Finance room. Always report figures in USD and call out YoY changes.'"
+                rows={3}
+                className="w-full px-2 py-1.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[11px] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#6366F1] resize-none"
+              />
+              <button
+                onClick={saveConfig}
+                disabled={savingConfig}
+                className="mt-1.5 w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg bg-[#6366F1] hover:bg-[#4F46E5] text-white text-[11px] font-medium disabled:opacity-50"
+              >
+                {savingConfig ? <Loader2 className="w-3 h-3 animate-spin" /> : configSaved ? <Check className="w-3 h-3" /> : <Save className="w-3 h-3" />}
+                {configSaved ? 'Saved' : 'Save setup'}
+              </button>
+              <p className="text-[9px] text-[var(--text-secondary)] mt-1 leading-snug">
+                Saves your selected rooms + instructions so this agent is ready next time.
+              </p>
             </div>
 
             {/* Recursion limit setting */}

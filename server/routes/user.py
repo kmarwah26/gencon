@@ -20,7 +20,11 @@ async def get_current_user(request: Request):
                 local = email.split("@")[0]
                 display_name = " ".join(part.capitalize() for part in local.replace(".", " ").replace("_", " ").split())
             return {
-                "id": request.headers.get("X-Forwarded-User", ""),
+                # Per-user identity key (used for per-user chat history). Prefer the
+                # stable X-Forwarded-User id, but fall back to the email/username —
+                # X-Forwarded-User can be empty, and an empty id would collapse every
+                # user's history into one shared bucket per room.
+                "id": request.headers.get("X-Forwarded-User", "") or user_name,
                 "user_name": user_name,
                 "display_name": display_name,
             }

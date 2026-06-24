@@ -15,8 +15,14 @@ class DatabasePool:
     async def get_pool(self) -> Optional[asyncpg.Pool]:
         host = os.environ.get("PGHOST", "")
         if not host:
-            print("[db] PGHOST not set, skipping Lakebase")
-            return None
+            # Fall back to SDK lookup so the app works even when the Apps resource
+            # injection isn't populating PGHOST. We look up the read_write_dns of
+            # the configured Lakebase instance.
+            host = _lookup_lakebase_host(LAKEBASE_INSTANCE)
+            if not host:
+                print("[db] PGHOST not set and SDK lookup failed — skipping Lakebase")
+                return None
+            print(f"[db] PGHOST resolved via SDK: {host}")
 
         # Try existing pool first
         if self._pool is not None:
@@ -67,6 +73,38 @@ class DatabasePool:
         if self._pool:
             await self._pool.close()
             self._pool = None
+
+
+_cached_host: Optional[str] = None
+
+
+def _lookup_lakebase_host(instance_name: str) -> str:
+    """Look up the read_write_dns for a Lakebase instance via SDK. Cached.
+
+    Tries `get_database_instance` first; falls back to scanning `list_database_instances`.
+    """
+    global _cached_host
+    if _cached_host:
+        return _cached_host
+    try:
+        w = get_workspace_client()
+        try:
+            inst = w.database.get_database_instance(name=instance_name)
+            host = getattr(inst, "read_write_dns", "") or ""
+            if host:
+                _cached_host = host
+                return host
+        except Exception as e1:
+            print(f"[db] get_database_instance failed ({e1}), trying list scan…")
+        for inst in w.database.list_database_instances():
+            if inst.name == instance_name:
+                host = getattr(inst, "read_write_dns", "") or ""
+                if host:
+                    _cached_host = host
+                    return host
+    except Exception as e:
+        print(f"[db] _lookup_lakebase_host failed for {instance_name}: {e}")
+    return ""
 
 
 def _get_user() -> str:

@@ -15,9 +15,15 @@
 # MAGIC 1. Creates a Lakebase instance (`genco-cache`)
 # MAGIC 2. Creates the `genco` database
 # MAGIC 3. Creates the Databricks App + grants SP access to warehouses, Genie rooms, and Unity Catalog
+# MAGIC 3c. Configures On-Behalf-Of-User (OBO) authorization scopes so each person's own
+# MAGIC     permissions apply to Genie / SQL / Unity Catalog / Lakeview-dashboard calls
 # MAGIC 4. Grants the app's service principal access to Lakebase
 # MAGIC 5. Attaches Lakebase as a connected resource
 # MAGIC 6. Deploys the app
+# MAGIC
+# MAGIC The app's Lakebase tables (`saved_questions`, `chat_history`, `semantic_cache`,
+# MAGIC row-level `filters`, `kpis`, and `genco_dashboards`) are created automatically on first
+# MAGIC use — the SP grants in Step 4 give it CREATE on the `public` schema so this just works.
 # MAGIC
 # MAGIC ---
 
@@ -46,6 +52,18 @@ LAKEBASE_INSTANCE = "genco-cache"
 LAKEBASE_CAPACITY = "CU_1"  # CU_1, CU_2, CU_4, CU_8
 DATABASE_NAME = "genco"
 RESOURCE_NAME = "genco-cache-db"
+
+# On-Behalf-Of-User (OBO) OAuth scopes the app requests. Each user consents on first
+# visit, and user-facing Databricks calls then run with that user's own permissions.
+# Mirror these in app.yaml's `user_authorization.scopes` block.
+USER_API_SCOPES = [
+    "sql",               # SQL Statement API: EDA, KPI exec, filter queries, execute-sql
+    "sql.warehouses",    # Warehouse list/start
+    "catalog.catalogs",  # Unity Catalog browse: catalogs/schemas/tables/columns
+    "dashboards.genie",  # Genie rooms: list/create/edit/delete, conversations, query results
+    "sql.dashboards",    # Lakeview dashboards: create/publish/share/embed
+    "files",             # Workspace files browser (list/export notebooks & SQL files)
+]
 
 # COMMAND ----------
 
@@ -427,11 +445,102 @@ else:
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## Step 3c: Configure On-Behalf-Of-User (OBO) Authorization Scopes
+# MAGIC
+# MAGIC The app runs user-facing Databricks calls (Genie, SQL, Unity Catalog, Lakeview
+# MAGIC dashboards, workspace files) **on behalf of the logged-in user**, so each person's own
+# MAGIC permissions apply (row filters, column masks, grants) rather than the service
+# MAGIC principal's. That requires declaring the OAuth scopes the app needs; users then consent
+# MAGIC on first visit.
+# MAGIC
+# MAGIC These scopes are **not** reliably applied from `app.yaml` for an app that already
+# MAGIC exists, so we set them explicitly via the Apps API here. (Lakeview dashboard
+# MAGIC create/publish still runs on the service principal — see `server/routes/dashboards.py`.)
+
+# COMMAND ----------
+
+import requests as _req
+
+_host = w.config.host.rstrip("/")
+_headers = {**w.config.authenticate(), "Content-Type": "application/json"}
+
+print(f"Setting OBO scopes on app '{APP_NAME}':")
+for s in USER_API_SCOPES:
+    print(f"  - {s}")
+
+scopes_ok = False
+for method in ("PATCH", "PUT"):
+    try:
+        r = _req.request(
+            method,
+            f"{_host}/api/2.0/apps/{APP_NAME}",
+            headers=_headers,
+            json={"user_api_scopes": USER_API_SCOPES},
+        )
+        if r.status_code < 300:
+            scopes_ok = True
+            applied = r.json().get("user_api_scopes", USER_API_SCOPES)
+            print(f"\n  Applied via {method}: {applied}")
+            break
+        else:
+            print(f"  {method} returned {r.status_code}: {r.text[:200]}")
+    except Exception as e:
+        print(f"  {method} failed: {e}")
+
+if not scopes_ok:
+    print("\n  WARNING: Could not set OBO scopes automatically.")
+    print("  Set them via the App's Authorization settings (UI), or run:")
+    print(f"    databricks apps update {APP_NAME} --json '{{\"user_api_scopes\": {USER_API_SCOPES}}}'")
+
+print("\n  NOTE: Existing users must RE-CONSENT on their next visit after scopes change,")
+print("  otherwise newly added scopes won't activate on their token (calls fall back to the SP).")
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Step 4: Grant the Service Principal Access to Lakebase
 # MAGIC
-# MAGIC The app's service principal needs PostgreSQL permissions to **create** its
-# MAGIC tables on first use and to read/write tables + sequences — including any
-# MAGIC created by the deploying user during local dev against this same Lakebase.
+# MAGIC First we register the SP as a Lakebase **instance role** — without it the app
+# MAGIC can't even authenticate to Postgres (symptom: "Database not available" / the pool
+# MAGIC fails to create), because SQL `GRANT`s assume the role already exists. As a
+# MAGIC `DATABRICKS_SUPERUSER` the SP can also read/write tables created by the deploying
+# MAGIC user and create its own. We then re-assert SQL grants as belt-and-suspenders.
+
+# COMMAND ----------
+
+# Create the SP's Lakebase instance role so it can authenticate to Postgres. This is the
+# step that prevents "Database not available" on a fresh workspace — the SQL GRANTs below
+# are not sufficient on their own because they silently no-op if the role doesn't exist.
+from databricks.sdk.service.database import (
+    DatabaseInstanceRole,
+    DatabaseInstanceRoleIdentityType,
+    DatabaseInstanceRoleMembershipRole,
+)
+
+try:
+    _existing_roles = [r.name for r in w.database.list_database_instance_roles(instance_name=LAKEBASE_INSTANCE)]
+except Exception as e:
+    _existing_roles = []
+    print(f"  Could not list instance roles: {e}")
+
+if sp_id in _existing_roles:
+    print(f"  Lakebase instance role for SP '{sp_id}' already exists.")
+else:
+    try:
+        w.database.create_database_instance_role(
+            instance_name=LAKEBASE_INSTANCE,
+            database_instance_role=DatabaseInstanceRole(
+                name=sp_id,
+                identity_type=DatabaseInstanceRoleIdentityType.SERVICE_PRINCIPAL,
+                membership_role=DatabaseInstanceRoleMembershipRole.DATABRICKS_SUPERUSER,
+            ),
+        )
+        print(f"  Created DATABRICKS_SUPERUSER instance role for SP '{sp_id}'.")
+    except Exception as e:
+        print(f"  Could not create instance role (may already exist): {e}")
+
+# NOTE: app stop/start cycles can de-provision this federated role — if the app later
+# reports "Database not available", re-run this cell to recreate it.
 
 # COMMAND ----------
 
@@ -671,6 +780,8 @@ print("=" * 60)
 # MAGIC | "Database not connected" in sidebar | Re-run Steps 4 and 5 above, then redeploy (Step 6) |
 # MAGIC | Blank page / no frontend | `frontend/dist/` is missing — build locally, commit, and pull the Git folder |
 # MAGIC | Deploy fails with package errors | Check `requirements.txt` has clean `package>=version` lines |
+# MAGIC | Genie/SQL calls 403 for a user | They haven't consented to the OBO scopes — have them reload the app and approve, or re-run Step 3c |
+# MAGIC | "Save to dashboard" / charts fail | Confirm the SP can reach a running SQL warehouse (Step 3) and `sql.dashboards` is in the OBO scopes (Step 3c) |
 # MAGIC
 # MAGIC **To view logs:** append `/logz` to the app URL shown above.
 # MAGIC
