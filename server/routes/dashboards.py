@@ -153,18 +153,63 @@ _CHART_TYPE_MAP = {
 }
 
 
+def _table_column_encoding(order_i: int, col: dict) -> dict:
+    """Full per-column encoding for a version-1 table widget.
+
+    The minimal {fieldName, displayName, type} encoding renders an EMPTY table in this
+    workspace's Lakeview — columns need `visible: true` plus the full field set, and the
+    widget needs pagination (see _build_table_widget). Verified empirically.
+    """
+    name = col["name"]
+    lv = _lakeview_type(col.get("type"))
+    if lv in ("integer", "decimal"):
+        display_as, align = "number", "right"
+    elif lv in ("date", "datetime"):
+        display_as, align = "datetime", "left"
+    elif lv == "boolean":
+        display_as, align = "boolean", "left"
+    else:
+        display_as, align = "string", "left"
+    return {
+        "fieldName": name,
+        "displayName": name,
+        "title": name,
+        "type": lv,
+        "displayAs": display_as,
+        "alignContent": align,
+        "order": 100000 + order_i,
+        "visible": True,
+        "allowHTML": False,
+        "allowSearch": False,
+        "booleanValues": ["false", "true"],
+        "highlightLinks": False,
+        "imageHeight": "",
+        "imageWidth": "",
+        "imageTitleTemplate": "{{ @ }}",
+        "imageUrlTemplate": "{{ @ }}",
+        "linkOpenInNewTab": True,
+        "linkTextTemplate": "{{ @ }}",
+        "linkTitleTemplate": "{{ @ }}",
+        "linkUrlTemplate": "{{ @ }}",
+        "preserveWhitespace": False,
+        "useMonospaceFont": False,
+    }
+
+
 def _build_table_widget(widget_id: str, dataset_name: str, columns: list[dict]) -> dict:
-    """Default — a table view showing all columns."""
+    """Default — a table view showing all columns.
+
+    Uses the version-1 table spec with explicit pagination (`itemsPerPage`/`paginationSize`)
+    and full per-column encodings. Without these the table renders EMPTY (a version-3 spec or
+    missing `itemsPerPage`/`visible` paginates to zero rows) — verified against this workspace.
+    """
     fields = [{"name": c["name"], "expression": f"`{c['name']}`"} for c in columns]
-    encoded = [
-        {"fieldName": c["name"], "displayName": c["name"], "type": _lakeview_type(c.get("type"))}
-        for c in columns
-    ]
+    encoded = [_table_column_encoding(i, c) for i, c in enumerate(columns)]
     return {
         "widget": {
             "name": widget_id,
             "queries": [{
-                "name": f"q_{widget_id}",
+                "name": "main_query",
                 "query": {
                     "datasetName": dataset_name,
                     "fields": fields,
@@ -172,8 +217,14 @@ def _build_table_widget(widget_id: str, dataset_name: str, columns: list[dict]) 
                 },
             }],
             "spec": {
-                "version": 3,
+                "version": 1,
                 "widgetType": "table",
+                "allowHTMLByDefault": False,
+                "condensed": True,
+                "withRowNumber": False,
+                "itemsPerPage": 25,
+                "paginationSize": "default",
+                "invisibleColumns": [],
                 "encodings": {"columns": encoded},
             },
         },
@@ -182,8 +233,12 @@ def _build_table_widget(widget_id: str, dataset_name: str, columns: list[dict]) 
 
 
 def _flat_dataset(dataset_name: str, dataset_display: str, sql: str) -> dict:
-    """Old-style dataset: raw SQL, results used directly. Used for table widgets."""
-    return {"name": dataset_name, "displayName": dataset_display, "queryLines": [sql]}
+    """Old-style dataset: raw SQL, results used directly. Used for table widgets.
+
+    Strip the trailing semicolon — a `;` in queryLines can break dataset execution (the
+    working tables in this workspace have none)."""
+    cleaned = (sql or "").strip().rstrip(";").strip()
+    return {"name": dataset_name, "displayName": dataset_display, "queryLines": [cleaned]}
 
 
 def _metric_view_source(sql: str) -> str:
