@@ -168,7 +168,7 @@ export default function CatalogExplorer() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by name or namespace (catalog.schema.table)..."
-              className="w-full pl-9 pr-8 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#D0A33C] transition-colors text-sm"
+              className="w-full pl-9 pr-8 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#6366F1] transition-colors text-sm"
             />
             {searchQuery && (
               <button
@@ -216,7 +216,7 @@ export default function CatalogExplorer() {
                           onClick={() => toggleCatalog(r.name)}
                           className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[var(--bg-hover)] text-sm transition-colors"
                         >
-                          <Database className="w-3.5 h-3.5 text-[#D0A33C]" />
+                          <Database className="w-3.5 h-3.5 text-[#6366F1]" />
                           <span className="font-medium">{r.name}</span>
                           <span className="ml-auto text-[10px] text-[var(--text-secondary)] uppercase">catalog</span>
                         </button>
@@ -229,7 +229,7 @@ export default function CatalogExplorer() {
                           onClick={() => { if (r.catalog) toggleSchema(r.catalog, r.name) }}
                           className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[var(--bg-hover)] text-sm transition-colors"
                         >
-                          <Layers className="w-3.5 h-3.5 text-[#325B6D]" />
+                          <Layers className="w-3.5 h-3.5 text-[#3B82F6]" />
                           <span className="font-medium">{r.name}</span>
                           <span className="text-[11px] text-[var(--text-secondary)] ml-1">{r.catalog}</span>
                           <span className="ml-auto text-[10px] text-[var(--text-secondary)] uppercase">schema</span>
@@ -251,8 +251,8 @@ export default function CatalogExplorer() {
                           onClick={() => toggleTable(r.full_name)}
                           className={`shrink-0 w-5 h-5 rounded border flex items-center justify-center transition-all ${
                             isSelected
-                              ? 'bg-[#D0A33C] border-[#D0A33C]'
-                              : 'border-[var(--border)] hover:border-[#D0A33C]'
+                              ? 'bg-[#6366F1] border-[#6366F1]'
+                              : 'border-[var(--border)] hover:border-[#6366F1]'
                           }`}
                         >
                           {isSelected && <Check className="w-3 h-3 text-white" />}
@@ -301,8 +301,8 @@ export default function CatalogExplorer() {
                           onClick={() => toggleTable(sr.table.full_name)}
                           className={`shrink-0 w-5 h-5 rounded border flex items-center justify-center transition-all ${
                             isSelected
-                              ? 'bg-[#D0A33C] border-[#D0A33C]'
-                              : 'border-[var(--border)] hover:border-[#D0A33C]'
+                              ? 'bg-[#6366F1] border-[#6366F1]'
+                              : 'border-[var(--border)] hover:border-[#6366F1]'
                           }`}
                         >
                           {isSelected && <Check className="w-3 h-3 text-white" />}
@@ -348,7 +348,7 @@ export default function CatalogExplorer() {
                     ) : (
                       <ChevronRight className="w-4 h-4 text-[var(--text-secondary)]" />
                     )}
-                    <Database className="w-4 h-4 text-[#D0A33C]" />
+                    <Database className="w-4 h-4 text-[#6366F1]" />
                     <span className="font-medium">{cat.name}</span>
                   </button>
 
@@ -377,7 +377,7 @@ export default function CatalogExplorer() {
                           ) : (
                             <ChevronRight className="w-4 h-4 text-[var(--text-secondary)]" />
                           )}
-                          <Layers className="w-4 h-4 text-[#325B6D]" />
+                          <Layers className="w-4 h-4 text-[#3B82F6]" />
                           <span>{sch.name}</span>
                         </button>
 
@@ -395,8 +395,8 @@ export default function CatalogExplorer() {
                                 onClick={() => toggleTable(tbl.full_name)}
                                 className={`shrink-0 w-5 h-5 rounded border flex items-center justify-center transition-all ${
                                   isSelected
-                                    ? 'bg-[#D0A33C] border-[#D0A33C]'
-                                    : 'border-[var(--border)] hover:border-[#D0A33C]'
+                                    ? 'bg-[#6366F1] border-[#6366F1]'
+                                    : 'border-[var(--border)] hover:border-[#6366F1]'
                                 }`}
                               >
                                 {isSelected && <Check className="w-3 h-3 text-white" />}
@@ -437,7 +437,7 @@ export default function CatalogExplorer() {
             </div>
             <button
               onClick={() => navigate('/create')}
-              className="w-full py-2 rounded-lg bg-[#D0A33C] hover:bg-[#b88d2e] text-white text-sm font-medium transition-colors"
+              className="w-full py-2 rounded-lg bg-[#6366F1] hover:bg-[#4F46E5] text-white text-sm font-medium transition-colors"
             >
               Create Genie Room
             </button>
@@ -461,7 +461,7 @@ export default function CatalogExplorer() {
                 onClick={() => toggleTable(selectedTable.full_name)}
                 className={`ml-auto px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                   selectedTables.includes(selectedTable.full_name)
-                    ? 'bg-[#D0A33C]/15 text-[#D0A33C] border border-[#D0A33C]/30'
+                    ? 'bg-[#6366F1]/15 text-[#6366F1] border border-[#6366F1]/30'
                     : 'bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
@@ -493,7 +493,7 @@ export default function CatalogExplorer() {
                 <tbody>
                   {selectedTable.columns.map((col, i) => (
                     <tr key={col.name} className={i % 2 === 0 ? '' : 'bg-[var(--bg-secondary)]'}>
-                      <td className="px-4 py-2 font-mono text-[#325B6D]">{col.name}</td>
+                      <td className="px-4 py-2 font-mono text-[#3B82F6]">{col.name}</td>
                       <td className="px-4 py-2 text-[var(--text-secondary)]">{col.type}</td>
                       <td className="px-4 py-2 text-[var(--text-secondary)]">{col.comment || '—'}</td>
                     </tr>

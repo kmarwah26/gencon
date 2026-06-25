@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from server.config import get_workspace_client
 from server.db import db
 
@@ -6,10 +6,10 @@ router = APIRouter(tags=["catalog"])
 
 
 @router.get("/catalog-search")
-async def search_catalog(q: str = Query(..., min_length=1)):
+async def search_catalog(request: Request, q: str = Query(..., min_length=1)):
     """Search by three-level namespace or plain table name."""
     try:
-        w = get_workspace_client()
+        w = get_workspace_client(request)
         parts = [p.strip() for p in q.split(".")]
         results = []
 
@@ -106,9 +106,9 @@ async def search_catalog(q: str = Query(..., min_length=1)):
 
 
 @router.get("/catalogs")
-async def list_catalogs():
+async def list_catalogs(request: Request):
     try:
-        w = get_workspace_client()
+        w = get_workspace_client(request)
         catalogs = []
         for c in w.catalogs.list(max_results=500):
             catalogs.append({
@@ -124,9 +124,9 @@ async def list_catalogs():
 
 
 @router.get("/catalogs/{catalog_name}/schemas")
-async def list_schemas(catalog_name: str):
+async def list_schemas(catalog_name: str, request: Request):
     try:
-        w = get_workspace_client()
+        w = get_workspace_client(request)
         schemas = []
         for s in w.schemas.list(catalog_name=catalog_name):
             schemas.append({
@@ -140,9 +140,9 @@ async def list_schemas(catalog_name: str):
 
 
 @router.get("/catalogs/{catalog_name}/schemas/{schema_name}/tables")
-async def list_tables(catalog_name: str, schema_name: str):
+async def list_tables(catalog_name: str, schema_name: str, request: Request):
     try:
-        w = get_workspace_client()
+        w = get_workspace_client(request)
         tables = []
         for t in w.tables.list(
             catalog_name=catalog_name, schema_name=schema_name

@@ -1,9 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import os
 
-from server.routes import catalog, genie, warehouses, user, supervisor, cache, analysis, workspace_files, saved_questions, chat_history, semantic_cache, sample_data
+from server.routes import catalog, genie, warehouses, user, supervisor, cache, analysis, workspace_files, saved_questions, chat_history, semantic_cache, sample_data, filters, kpis, dashboards
 
 app = FastAPI(title="Genie-Force")
 
@@ -19,6 +19,51 @@ app.include_router(saved_questions.router, prefix="/api")
 app.include_router(chat_history.router, prefix="/api")
 app.include_router(semantic_cache.router, prefix="/api")
 app.include_router(sample_data.router, prefix="/api")
+app.include_router(filters.router, prefix="/api")
+app.include_router(kpis.router, prefix="/api")
+app.include_router(dashboards.router, prefix="/api")
+
+
+@app.get("/api/_debug/auth")
+async def debug_auth(request: Request):
+    """Diagnostic: show which forwarded headers Databricks Apps is sending."""
+    return {
+        "is_databricks_app": os.environ.get("DATABRICKS_APP_NAME", "") != "",
+        "DATABRICKS_APP_NAME": os.environ.get("DATABRICKS_APP_NAME", ""),
+        "forwarded_email": request.headers.get("X-Forwarded-Email", ""),
+        "forwarded_user": request.headers.get("X-Forwarded-User", ""),
+        "forwarded_username": request.headers.get("X-Forwarded-Preferred-Username", ""),
+        "has_access_token": bool(request.headers.get("X-Forwarded-Access-Token", "")),
+        "access_token_prefix": (request.headers.get("X-Forwarded-Access-Token", "")[:12] + "...") if request.headers.get("X-Forwarded-Access-Token") else "",
+        "all_x_forwarded_headers": {k: ("(set)" if k.lower() == "x-forwarded-access-token" else v) for k, v in request.headers.items() if k.lower().startswith("x-forwarded-")},
+    }
+
+
+@app.get("/api/_debug/deps")
+async def debug_deps():
+    """Diagnostic: report the supervisor/MCP dependency versions and symbols so we can
+    pin a compatible set. Reports installed versions, the actual symbols exported by
+    mcp.client.streamable_http, and the real traceback from importing the supervisor stack."""
+    import importlib, importlib.metadata, traceback
+    out = {"versions": {}, "streamable_http_symbols": None, "import_errors": {}}
+    for pkg in ("mcp", "langchain-mcp-adapters", "databricks-langchain",
+                "databricks-ai-bridge", "langgraph", "langgraph-supervisor", "langgraph-prebuilt"):
+        try:
+            out["versions"][pkg] = importlib.metadata.version(pkg)
+        except Exception as e:
+            out["versions"][pkg] = f"(not found: {e})"
+    try:
+        mod = importlib.import_module("mcp.client.streamable_http")
+        out["streamable_http_symbols"] = [n for n in dir(mod) if not n.startswith("__")]
+    except Exception as e:
+        out["streamable_http_symbols"] = f"(import failed: {e})"
+    for target in ("databricks_langchain", "databricks_langchain.genie", "langgraph_supervisor"):
+        try:
+            importlib.import_module(target)
+            out["import_errors"][target] = "OK"
+        except Exception:
+            out["import_errors"][target] = traceback.format_exc()[-800:]
+    return out
 
 
 @app.get("/api/db-health")

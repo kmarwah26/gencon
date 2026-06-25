@@ -4,12 +4,14 @@ import {
   Pencil, X, Loader2, Warehouse, Search, Save,
   ChevronRight, ChevronDown, Database, Layers, Table2, Check,
   AlertTriangle, CheckCircle2, Code, Plus, Trash2, Upload,
-  FolderOpen, Folder, FileText, ArrowLeft,
+  FolderOpen, Folder, FileText, ArrowLeft, Lock, Users as UsersIcon,
+  User,
 } from 'lucide-react'
 import { api } from '../api'
 import type {
   Warehouse as WarehouseType, Catalog, Schema, Table,
   CatalogSearchResult, GenieRoomDetail, WorkspaceItem,
+  FilterColumn, UserFilter, AvailableColumn, Principal,
 } from '../api'
 
 interface SampleQuery {
@@ -198,7 +200,7 @@ export default function EditRoom() {
         <section>
           <label className="block text-sm font-semibold text-[var(--text-primary)] mb-2">Room Name</label>
           <input type="text" value={title} onChange={(e) => setTitle(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:border-[#D0A33C] transition-colors" />
+            className="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:border-[#6366F1] transition-colors" />
         </section>
 
         {/* Description */}
@@ -207,7 +209,7 @@ export default function EditRoom() {
           <textarea value={description} onChange={(e) => setDescription(e.target.value)}
             placeholder="Describe what this room is for..."
             rows={5}
-            className="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#D0A33C] transition-colors resize-none" />
+            className="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#6366F1] transition-colors resize-none" />
         </section>
 
         {/* Warehouse */}
@@ -216,7 +218,7 @@ export default function EditRoom() {
             <Warehouse className="w-4 h-4 text-[var(--text-secondary)]" /> SQL Warehouse
           </label>
           <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:border-[#D0A33C] transition-colors">
+            className="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:border-[#6366F1] transition-colors">
             <option value="">Auto-select</option>
             {warehouses.map((wh) => (<option key={wh.id} value={wh.id}>{wh.name} ({wh.state.replace('STATE_', '')})</option>))}
           </select>
@@ -227,7 +229,7 @@ export default function EditRoom() {
           <div className="flex items-center justify-between mb-2">
             <label className="text-sm font-semibold text-[var(--text-primary)]">Tables ({selectedTables.length})</label>
             {!pickerOpen && (
-              <button onClick={openPicker} className="flex items-center gap-1 text-xs text-[#D0A33C] hover:text-[#D0A33C] font-medium">
+              <button onClick={openPicker} className="flex items-center gap-1 text-xs text-[#6366F1] hover:text-[#6366F1] font-medium">
                 <Plus className="w-3 h-3" /> Add tables
               </button>
             )}
@@ -280,7 +282,7 @@ export default function EditRoom() {
           <textarea value={instructions} onChange={(e) => setInstructions(e.target.value)}
             placeholder="e.g., Always filter by active status. Use fiscal year dates..."
             rows={4}
-            className="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#D0A33C] transition-colors resize-none text-sm" />
+            className="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#6366F1] transition-colors resize-none text-sm" />
         </section>
 
         {/* SQL Queries & Functions */}
@@ -288,7 +290,7 @@ export default function EditRoom() {
           <div className="flex items-center justify-between mb-1">
             <h3 className="text-sm font-semibold text-[var(--text-primary)]">SQL Queries &amp; Functions</h3>
             <button onClick={() => setSampleQueries([...sampleQueries, { question: '', sql: '' }])}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#D0A33C]/10 text-[#D0A33C] text-xs font-medium hover:bg-[#D0A33C]/20 transition-colors">
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#6366F1]/10 text-[#6366F1] text-xs font-medium hover:bg-[#6366F1]/20 transition-colors">
               <Plus className="w-3.5 h-3.5" /> Add Query
             </button>
           </div>
@@ -304,7 +306,7 @@ export default function EditRoom() {
 
           {sampleQueries.length === 0 && (
             <button onClick={() => setSampleQueries([{ question: '', sql: '' }])}
-              className="w-full py-6 rounded-lg border-2 border-dashed border-[var(--border)] hover:border-[#D0A33C]/50 text-[var(--text-secondary)] hover:text-[#D0A33C] transition-colors flex flex-col items-center gap-2">
+              className="w-full py-6 rounded-lg border-2 border-dashed border-[var(--border)] hover:border-[#6366F1]/50 text-[var(--text-secondary)] hover:text-[#6366F1] transition-colors flex flex-col items-center gap-2">
               <Code className="w-5 h-5" />
               <span className="text-sm">Add a SQL query manually</span>
             </button>
@@ -324,7 +326,7 @@ export default function EditRoom() {
                     <input type="text" value={sq.question}
                       onChange={(e) => { const u = [...sampleQueries]; u[idx] = { ...u[idx], question: e.target.value }; setSampleQueries(u) }}
                       placeholder="e.g., What are the top 10 customers by revenue?"
-                      className="w-full px-3 py-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#D0A33C] transition-colors text-sm" />
+                      className="w-full px-3 py-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#6366F1] transition-colors text-sm" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">SQL</label>
@@ -332,13 +334,17 @@ export default function EditRoom() {
                       onChange={(e) => { const u = [...sampleQueries]; u[idx] = { ...u[idx], sql: e.target.value }; setSampleQueries(u) }}
                       placeholder="SELECT ..."
                       rows={4}
-                      className="w-full px-3 py-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#D0A33C] transition-colors text-sm font-mono resize-none" />
+                      className="w-full px-3 py-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#6366F1] transition-colors text-sm font-mono resize-none" />
                   </div>
                 </div>
               </div>
             ))}
           </div>
         </section>
+
+        {/* Access & Filters */}
+        {roomId && <AccessFiltersSection roomId={roomId} />}
+
 
         {/* Save / Delete */}
         <div className="flex gap-3 pt-4 border-t border-[var(--border)]">
@@ -347,7 +353,7 @@ export default function EditRoom() {
             <ArrowLeft className="w-4 h-4" /> Back to Rooms
           </button>
           <button onClick={handleSave} disabled={saving || !title.trim() || selectedTables.length === 0}
-            className="flex-1 py-3 rounded-lg bg-gradient-to-r from-[#D0A33C] to-[#3F1F14] hover:from-[#b88d2e] hover:to-[#3F1F14] text-white font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+            className="flex-1 py-3 rounded-lg bg-gradient-to-r from-[#6366F1] to-[#4338CA] hover:from-[#4F46E5] hover:to-[#4338CA] text-white font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
             {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : <><Save className="w-4 h-4" /> Save Changes</>}
           </button>
           <button onClick={() => setShowDeleteConfirm(true)} disabled={deleting}
@@ -410,7 +416,7 @@ function CatalogPicker({ pickerSearch, setPickerSearch, searching, searchResults
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-secondary)]" />
           <input type="text" value={pickerSearch} onChange={(e) => setPickerSearch(e.target.value)}
             placeholder="Search tables (e.g. trips or catalog.schema.table)..."
-            className="w-full pl-8 pr-8 py-1.5 rounded-md bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#D0A33C] transition-colors text-sm"
+            className="w-full pl-8 pr-8 py-1.5 rounded-md bg-[var(--bg-secondary)] border border-[var(--border)] text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#6366F1] transition-colors text-sm"
             autoFocus />
           {pickerSearch && <button onClick={() => setPickerSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"><X className="w-3.5 h-3.5" /></button>}
         </div>
@@ -424,7 +430,7 @@ function CatalogPicker({ pickerSearch, setPickerSearch, searching, searchResults
                 const isSelected = selectedTables.includes(r.full_name)
                 return (
                   <button key={r.full_name} onClick={() => toggleTable(r.full_name)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[var(--bg-hover)] text-sm transition-colors">
-                    <div className={`shrink-0 rounded border flex items-center justify-center ${isSelected ? 'bg-[#D0A33C] border-[#D0A33C]' : 'border-[var(--border)]'}`} style={{ width: 18, height: 18 }}>
+                    <div className={`shrink-0 rounded border flex items-center justify-center ${isSelected ? 'bg-[#6366F1] border-[#6366F1]' : 'border-[var(--border)]'}`} style={{ width: 18, height: 18 }}>
                       {isSelected && <Check className="w-3 h-3 text-white" />}
                     </div>
                     <Table2 className="w-3.5 h-3.5 text-emerald-500" />
@@ -441,7 +447,7 @@ function CatalogPicker({ pickerSearch, setPickerSearch, searching, searchResults
                   else if (r.type === 'schema' && r.catalog) setPickerSearch(`${r.catalog}.${r.name}.`)
                 }}
                   className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[var(--bg-hover)] text-sm transition-colors">
-                  {r.type === 'catalog' ? <Database className="w-3.5 h-3.5 text-[#D0A33C]" /> : <Layers className="w-3.5 h-3.5 text-[#325B6D]" />}
+                  {r.type === 'catalog' ? <Database className="w-3.5 h-3.5 text-[#6366F1]" /> : <Layers className="w-3.5 h-3.5 text-[#3B82F6]" />}
                   <span className="font-medium">{r.name}</span>
                   <span className="ml-auto text-[10px] text-[var(--text-secondary)] uppercase tracking-wider">{r.type} &rsaquo;</span>
                 </button>
@@ -457,7 +463,7 @@ function CatalogPicker({ pickerSearch, setPickerSearch, searching, searchResults
               <div key={cat.name}>
                 <button onClick={() => toggleCatalog(cat.name)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[var(--bg-hover)] text-sm transition-colors">
                   {loadingNodes.has(cat.name) ? <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--text-secondary)]" /> : expandedCatalogs.has(cat.name) ? <ChevronDown className="w-3.5 h-3.5 text-[var(--text-secondary)]" /> : <ChevronRight className="w-3.5 h-3.5 text-[var(--text-secondary)]" />}
-                  <Database className="w-3.5 h-3.5 text-[#D0A33C]" /><span className="font-medium">{cat.name}</span>
+                  <Database className="w-3.5 h-3.5 text-[#6366F1]" /><span className="font-medium">{cat.name}</span>
                 </button>
                 {expandedCatalogs.has(cat.name) && schemas[cat.name]?.map((sch: Schema) => {
                   const sk = `${cat.name}.${sch.name}`
@@ -465,13 +471,13 @@ function CatalogPicker({ pickerSearch, setPickerSearch, searching, searchResults
                     <div key={sch.name} className="ml-4">
                       <button onClick={() => toggleSchema(cat.name, sch.name)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[var(--bg-hover)] text-sm transition-colors">
                         {loadingNodes.has(sk) ? <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--text-secondary)]" /> : expandedSchemas.has(sk) ? <ChevronDown className="w-3.5 h-3.5 text-[var(--text-secondary)]" /> : <ChevronRight className="w-3.5 h-3.5 text-[var(--text-secondary)]" />}
-                        <Layers className="w-3.5 h-3.5 text-[#325B6D]" /><span>{sch.name}</span>
+                        <Layers className="w-3.5 h-3.5 text-[#3B82F6]" /><span>{sch.name}</span>
                       </button>
                       {expandedSchemas.has(sk) && tables[sk]?.map((tbl: Table) => {
                         const isSel = selectedTables.includes(tbl.full_name)
                         return (
                           <button key={tbl.name} onClick={() => toggleTable(tbl.full_name)} className="w-full ml-4 flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-[var(--bg-hover)] text-sm transition-colors">
-                            <div className={`shrink-0 rounded border flex items-center justify-center ${isSel ? 'bg-[#D0A33C] border-[#D0A33C]' : 'border-[var(--border)]'}`} style={{ width: 18, height: 18 }}>
+                            <div className={`shrink-0 rounded border flex items-center justify-center ${isSel ? 'bg-[#6366F1] border-[#6366F1]' : 'border-[var(--border)]'}`} style={{ width: 18, height: 18 }}>
                               {isSel && <Check className="w-3 h-3 text-white" />}
                             </div>
                             <Table2 className="w-3.5 h-3.5 text-emerald-500" /><span className="truncate">{tbl.name}</span>
@@ -484,14 +490,14 @@ function CatalogPicker({ pickerSearch, setPickerSearch, searching, searchResults
               </div>
             ))}
             {visibleCount < filteredCatalogs.length && (
-              <button onClick={() => setVisibleCount((c: number) => c + 50)} className="w-full py-2 text-xs text-[#D0A33C] font-medium">Show more ({filteredCatalogs.length - visibleCount})</button>
+              <button onClick={() => setVisibleCount((c: number) => c + 50)} className="w-full py-2 text-xs text-[#6366F1] font-medium">Show more ({filteredCatalogs.length - visibleCount})</button>
             )}
           </>
         )}
       </div>
       <div className="px-3 py-2 border-t border-[var(--border)] bg-[var(--bg-tertiary)] flex items-center justify-between">
         <span className="text-xs text-[var(--text-secondary)]">{selectedTables.length} selected</span>
-        <button onClick={onClose} className="text-xs font-medium text-[#D0A33C] hover:text-[#D0A33C]">Done</button>
+        <button onClick={onClose} className="text-xs font-medium text-[#6366F1] hover:text-[#6366F1]">Done</button>
       </div>
     </div>
   )
@@ -566,11 +572,11 @@ function SqlFileUploader({ onAddAsQuery }: {
       {/* Source buttons */}
       <div className="flex gap-2">
         <button onClick={() => fileInputRef.current?.click()}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-xs font-medium text-[var(--text-secondary)] hover:text-[#D0A33C] hover:border-[#D0A33C]/30 transition-colors">
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-xs font-medium text-[var(--text-secondary)] hover:text-[#6366F1] hover:border-[#6366F1]/30 transition-colors">
           <Upload className="w-3.5 h-3.5" /> Upload from computer
         </button>
         <button onClick={() => { setShowWorkspaceBrowser(true); browseWorkspace(wsPath === '/' ? '/' : wsPath) }}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-xs font-medium text-[var(--text-secondary)] hover:text-[#325B6D] hover:border-[#325B6D]/30 transition-colors">
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-xs font-medium text-[var(--text-secondary)] hover:text-[#3B82F6] hover:border-[#3B82F6]/30 transition-colors">
           <FolderOpen className="w-3.5 h-3.5" /> Browse workspace
         </button>
       </div>
@@ -579,7 +585,7 @@ function SqlFileUploader({ onAddAsQuery }: {
       {showWorkspaceBrowser && (
         <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] overflow-hidden">
           <div className="px-3 py-2.5 bg-[var(--bg-tertiary)] border-b border-[var(--border)] flex items-center gap-2">
-            <FolderOpen className="w-3.5 h-3.5 text-[#325B6D]" />
+            <FolderOpen className="w-3.5 h-3.5 text-[#3B82F6]" />
             <span className="text-xs font-semibold text-[var(--text-primary)] flex-1 truncate">{wsPath}</span>
             <button onClick={() => setShowWorkspaceBrowser(false)} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]"><X className="w-3.5 h-3.5" /></button>
           </div>
@@ -599,11 +605,11 @@ function SqlFileUploader({ onAddAsQuery }: {
                       onClick={() => isDir ? browseWorkspace(item.path) : !alreadyAdded && importWorkspaceFile(item)}
                       disabled={(!isDir && alreadyAdded) || wsReadingFile === item.path}
                       className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors ${alreadyAdded && !isDir ? 'bg-emerald-500/5' : 'hover:bg-[var(--bg-hover)]'} disabled:opacity-60`}>
-                      {isDir ? <Folder className="w-3.5 h-3.5 text-amber-500 shrink-0" /> : <FileText className={`w-3.5 h-3.5 shrink-0 ${alreadyAdded ? 'text-emerald-500' : item.is_sql ? 'text-[#D0A33C]' : 'text-[var(--text-secondary)]'}`} />}
+                      {isDir ? <Folder className="w-3.5 h-3.5 text-amber-500 shrink-0" /> : <FileText className={`w-3.5 h-3.5 shrink-0 ${alreadyAdded ? 'text-emerald-500' : item.is_sql ? 'text-[#6366F1]' : 'text-[var(--text-secondary)]'}`} />}
                       <span className={`flex-1 text-left truncate ${alreadyAdded ? 'text-emerald-600' : item.is_sql ? 'text-[var(--text-primary)] font-medium' : 'text-[var(--text-secondary)]'}`}>{item.name}</span>
-                      {wsReadingFile === item.path && <Loader2 className="w-3 h-3 animate-spin text-[#D0A33C]" />}
+                      {wsReadingFile === item.path && <Loader2 className="w-3 h-3 animate-spin text-[#6366F1]" />}
                       {!isDir && alreadyAdded && <span className="flex items-center gap-1 text-[10px] text-emerald-600 font-medium"><CheckCircle2 className="w-3 h-3" /> Added as query</span>}
-                      {!isDir && item.is_sql && !alreadyAdded && wsReadingFile !== item.path && <span className="text-[10px] text-[#D0A33C] font-medium">Import</span>}
+                      {!isDir && item.is_sql && !alreadyAdded && wsReadingFile !== item.path && <span className="text-[10px] text-[#6366F1] font-medium">Import</span>}
                       {isDir && <ChevronRight className="w-3 h-3 text-[var(--text-secondary)]" />}
                     </button>
                   )
@@ -640,3 +646,354 @@ function SqlFileUploader({ onAddAsQuery }: {
     </div>
   )
 }
+
+
+// ── Access & Filters ──
+
+function AccessFiltersSection({ roomId }: { roomId: string }) {
+  const [columns, setColumns] = useState<FilterColumn[]>([])
+  const [users, setUsers] = useState<UserFilter[]>([])
+  const [available, setAvailable] = useState<AvailableColumn[]>([])
+  const [loading, setLoading] = useState(true)
+  const [dbAvailable, setDbAvailable] = useState(true)
+  const [selectedCol, setSelectedCol] = useState('')
+  const [newColLabel, setNewColLabel] = useState('')
+  const [addingCol, setAddingCol] = useState(false)
+  const [addingUser, setAddingUser] = useState(false)
+  const [error, setError] = useState('')
+
+  const reload = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const [colsRes, usersRes, avRes] = await Promise.all([
+        api.listFilterColumns(roomId),
+        api.listUserFilters(roomId),
+        api.listAvailableColumns(roomId).catch(() => ({ columns: [] as AvailableColumn[], tables: [] })),
+      ])
+      setColumns(colsRes.columns)
+      setUsers(usersRes.users)
+      setAvailable(avRes.columns)
+      setDbAvailable(colsRes.db_available && usersRes.db_available)
+    } catch (e: any) {
+      setError(e.message || 'Failed to load filter config')
+    } finally {
+      setLoading(false)
+    }
+  }, [roomId])
+
+  useEffect(() => { reload() }, [reload])
+
+  const handleAddColumn = async () => {
+    if (!selectedCol.trim()) return
+    setAddingCol(true)
+    setError('')
+    try {
+      await api.addFilterColumn(roomId, { column_name: selectedCol.trim(), label: newColLabel.trim() || undefined })
+      setSelectedCol('')
+      setNewColLabel('')
+      await reload()
+    } catch (e: any) {
+      setError(e.message || 'Failed to add column')
+    } finally {
+      setAddingCol(false)
+    }
+  }
+
+  const handleRemoveColumn = async (col: string) => {
+    if (!confirm(`Remove filter column "${col}"? This will also remove all user mappings for it.`)) return
+    try {
+      await api.removeFilterColumn(roomId, col)
+      await reload()
+    } catch (e: any) {
+      setError(e.message || 'Failed to remove column')
+    }
+  }
+
+  const handleAddPrincipal = async (p: Principal) => {
+    if (columns.length === 0) {
+      setError('Add at least one filter column first')
+      return
+    }
+    setAddingUser(true)
+    setError('')
+    try {
+      const id = p.type === 'user' ? (p.email || p.user_name || p.id).toLowerCase() : p.id
+      // Seed the principal with an empty array on every column so they appear in the table
+      for (const c of columns) {
+        await api.setUserFilter(roomId, id, {
+          column_name: c.column_name,
+          allowed_values: [],
+          principal_type: p.type,
+          display_name: p.display_name,
+        })
+      }
+      await reload()
+    } catch (e: any) {
+      setError(e.message || 'Failed to add principal')
+    } finally {
+      setAddingUser(false)
+    }
+  }
+
+  const handleRemoveUser = async (email: string) => {
+    if (!confirm(`Remove all filter access for ${email}?`)) return
+    try {
+      await api.deleteUserFilter(roomId, email)
+      await reload()
+    } catch (e: any) {
+      setError(e.message || 'Failed to remove user')
+    }
+  }
+
+  const handleUpdateUserValues = async (u: UserFilter, col: string, csv: string) => {
+    const values = csv.split(',').map((v) => v.trim()).filter(Boolean)
+    try {
+      await api.setUserFilter(roomId, u.user_email, {
+        column_name: col, allowed_values: values,
+        principal_type: u.principal_type, display_name: u.display_name,
+      })
+    } catch (e: any) {
+      setError(e.message || 'Failed to save values')
+    }
+  }
+
+  const alreadyAddedCols = new Set(columns.map((c) => c.column_name))
+  const alreadyAddedPrincipals = new Set(users.map((u) => u.user_email.toLowerCase()))
+
+  return (
+    <section>
+      <div className="flex items-center gap-2 mb-1">
+        <Lock className="w-4 h-4 text-[#6366F1]" />
+        <h3 className="text-sm font-semibold text-[var(--text-primary)]">Access &amp; Filters</h3>
+      </div>
+      <p className="text-xs text-[var(--text-secondary)] mb-3">
+        Row-level security. Pick columns from the room's tables to filter on, then grant access to users or groups.
+        Without a mapping, a user cannot use the chat in this room.
+      </p>
+
+      {!dbAvailable && (
+        <div className="mb-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-600 text-xs">
+          Lakebase unavailable — filter config can't be saved right now.
+        </div>
+      )}
+      {error && (
+        <div className="mb-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-xs">{error}</div>
+      )}
+
+      {/* Filter columns */}
+      <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] p-4 mb-4">
+        <h4 className="text-xs font-semibold text-[var(--text-primary)] mb-3">Filter columns</h4>
+        <div className="flex gap-2 mb-3">
+          <select
+            value={selectedCol}
+            onChange={(e) => setSelectedCol(e.target.value)}
+            className="flex-1 px-3 py-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#6366F1]"
+          >
+            <option value="">
+              {available.length === 0 ? 'No columns available — set up the room first' : 'Select a column from the room\'s tables…'}
+            </option>
+            {available.filter((c) => !alreadyAddedCols.has(c.name)).map((c) => (
+              <option key={c.name} value={c.name}>
+                {c.name} ({c.type}) {c.tables.length > 1 ? `· ${c.tables.length} tables` : ''}
+              </option>
+            ))}
+          </select>
+          <input
+            type="text"
+            value={newColLabel}
+            onChange={(e) => setNewColLabel(e.target.value)}
+            placeholder="Label (optional)"
+            className="w-40 px-3 py-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#6366F1]"
+          />
+          <button onClick={handleAddColumn} disabled={addingCol || !selectedCol}
+            className="px-3 py-2 rounded-md bg-[#6366F1]/10 text-[#6366F1] text-xs font-medium hover:bg-[#6366F1]/20 disabled:opacity-40 flex items-center gap-1">
+            <Plus className="w-3.5 h-3.5" /> Add
+          </button>
+        </div>
+        {loading ? (
+          <p className="text-xs text-[var(--text-secondary)]"><Loader2 className="w-3 h-3 inline animate-spin mr-1" /> Loading…</p>
+        ) : columns.length === 0 ? (
+          <p className="text-xs text-[var(--text-secondary)]">No filter columns yet — chat is unrestricted.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {columns.map((c) => (
+              <span key={c.column_name} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)] text-xs">
+                <code className="text-[#6366F1]">{c.column_name}</code>
+                {c.label && c.label !== c.column_name && <span className="text-[var(--text-secondary)]">({c.label})</span>}
+                <button onClick={() => handleRemoveColumn(c.column_name)} className="text-[var(--text-secondary)] hover:text-red-400">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* User access */}
+      <div className="rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <UsersIcon className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+          <h4 className="text-xs font-semibold text-[var(--text-primary)]">User &amp; group access</h4>
+        </div>
+
+        <PrincipalPicker
+          onPick={handleAddPrincipal}
+          excludeIds={alreadyAddedPrincipals}
+          disabled={addingUser || columns.length === 0}
+          disabledReason={columns.length === 0 ? 'Add a filter column first' : undefined}
+        />
+
+        {columns.length === 0 ? (
+          <p className="text-xs text-[var(--text-secondary)] mt-3">Add filter columns above first.</p>
+        ) : users.length === 0 ? (
+          <p className="text-xs text-[var(--text-secondary)] mt-3">No users or groups granted access. The room is closed.</p>
+        ) : (
+          <div className="overflow-x-auto mt-3">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-[var(--text-secondary)] border-b border-[var(--border)]">
+                  <th className="py-2 pr-3 font-medium">Principal</th>
+                  {columns.map((c) => (
+                    <th key={c.column_name} className="py-2 pr-3 font-medium">
+                      <code className="text-[#6366F1]">{c.column_name}</code>
+                    </th>
+                  ))}
+                  <th className="py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((u) => (
+                  <tr key={u.user_email} className="border-b border-[var(--border)] last:border-0">
+                    <td className="py-2 pr-3 max-w-[220px]">
+                      <div className="flex items-center gap-1.5">
+                        {u.principal_type === 'group'
+                          ? <UsersIcon className="w-3 h-3 text-[#3B82F6] shrink-0" />
+                          : <User className="w-3 h-3 text-[var(--text-secondary)] shrink-0" />}
+                        <div className="min-w-0">
+                          <p className="text-[var(--text-primary)] truncate">{u.display_name || u.user_email}</p>
+                          {u.principal_type === 'user' && u.display_name && u.display_name !== u.user_email && (
+                            <p className="text-[9px] text-[var(--text-secondary)] font-mono truncate">{u.user_email}</p>
+                          )}
+                          {u.principal_type === 'group' && (
+                            <p className="text-[9px] text-[#3B82F6] font-semibold">GROUP</p>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    {columns.map((c) => (
+                      <td key={c.column_name} className="py-2 pr-3">
+                        <input
+                          type="text"
+                          defaultValue={(u.filters[c.column_name] || []).join(', ')}
+                          onBlur={(e) => handleUpdateUserValues(u, c.column_name, e.target.value)}
+                          placeholder="e.g., EMEA, APAC"
+                          className="w-full px-2 py-1 rounded bg-[var(--bg-tertiary)] border border-[var(--border)] text-[11px] focus:outline-none focus:border-[#6366F1]"
+                        />
+                      </td>
+                    ))}
+                    <td className="py-2">
+                      <button onClick={() => handleRemoveUser(u.user_email)} className="text-[var(--text-secondary)] hover:text-red-400">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-[10px] text-[var(--text-secondary)] mt-2">Tip: comma-separate values. Empty cell = no access for that column. Saves on blur.</p>
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
+
+// ── Principal picker (typeahead for users + groups) ──
+
+export function PrincipalPicker({ onPick, excludeIds, disabled, disabledReason }: {
+  onPick: (p: Principal) => void
+  excludeIds: Set<string>
+  disabled?: boolean
+  disabledReason?: string
+}) {
+  const [q, setQ] = useState('')
+  const [results, setResults] = useState<Principal[]>([])
+  const [searching, setSearching] = useState(false)
+  const [open, setOpen] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  useEffect(() => {
+    if (timer.current) clearTimeout(timer.current)
+    if (!q.trim() || q.trim().length < 2) {
+      setResults([])
+      return
+    }
+    setSearching(true)
+    timer.current = setTimeout(async () => {
+      try {
+        const r = await api.searchPrincipals(q.trim(), 10)
+        setResults(r.principals)
+      } catch {
+        setResults([])
+      } finally {
+        setSearching(false)
+      }
+    }, 250)
+    return () => { if (timer.current) clearTimeout(timer.current) }
+  }, [q])
+
+  const filtered = results.filter((p) => !excludeIds.has((p.email || p.id).toLowerCase()))
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-secondary)] pointer-events-none" />
+        <input
+          type="text"
+          value={q}
+          onChange={(e) => { setQ(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder={disabled ? (disabledReason || 'Disabled') : 'Search for users or groups…'}
+          disabled={disabled}
+          className="w-full pl-9 pr-3 py-2 rounded-md bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#6366F1] disabled:opacity-50"
+        />
+        {searching && (
+          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-secondary)] animate-spin" />
+        )}
+      </div>
+      {open && q.trim().length >= 2 && (
+        <div className="absolute z-20 mt-1 w-full rounded-md border border-[var(--border)] bg-[var(--bg-primary)] shadow-lg max-h-72 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-[var(--text-secondary)]">{searching ? 'Searching…' : 'No matches.'}</p>
+          ) : (
+            filtered.map((p, i) => (
+              <button
+                key={`${p.type}:${p.id || p.email || i}`}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { onPick(p); setQ(''); setResults([]); setOpen(false) }}
+                className="w-full text-left px-3 py-2 hover:bg-[var(--bg-tertiary)] flex items-center gap-2 border-b border-[var(--border)] last:border-0"
+              >
+                {p.type === 'group'
+                  ? <UsersIcon className="w-3.5 h-3.5 text-[#3B82F6] shrink-0" />
+                  : <User className="w-3.5 h-3.5 text-[var(--text-secondary)] shrink-0" />}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-[var(--text-primary)] truncate">{p.display_name}</p>
+                  {p.type === 'user' && p.email && p.email !== p.display_name && (
+                    <p className="text-[10px] text-[var(--text-secondary)] font-mono truncate">{p.email}</p>
+                  )}
+                  {p.type === 'group' && p.member_count != null && (
+                    <p className="text-[10px] text-[#3B82F6]">GROUP · {p.member_count} member{p.member_count !== 1 ? 's' : ''}</p>
+                  )}
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+

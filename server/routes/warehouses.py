@@ -1,13 +1,13 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from server.config import get_workspace_client
 
 router = APIRouter(tags=["warehouses"])
 
 
 @router.get("/warehouses")
-async def list_warehouses():
+async def list_warehouses(request: Request):
     try:
-        w = get_workspace_client()
+        w = get_workspace_client(request)
         warehouses = []
         for wh in w.warehouses.list():
             warehouses.append({
@@ -22,9 +22,9 @@ async def list_warehouses():
 
 
 @router.post("/warehouses/{warehouse_id}/start")
-async def start_warehouse(warehouse_id: str):
+async def start_warehouse(warehouse_id: str, request: Request):
     try:
-        w = get_workspace_client()
+        w = get_workspace_client(request)
         w.warehouses.start(warehouse_id)
         return {"started": True, "warehouse_id": warehouse_id}
     except Exception as e:

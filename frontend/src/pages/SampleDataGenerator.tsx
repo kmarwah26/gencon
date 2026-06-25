@@ -50,6 +50,7 @@ export default function SampleDataGenerator() {
 
   // Selections
   const [selectedIndustry, setSelectedIndustry] = useState<SampleIndustry | null>(null)
+  const [selectedCategory, setSelectedCategory] = useState<string>('')
   const [warehouses, setWarehouses] = useState<WarehouseType[]>([])
   const [selectedWarehouse, setSelectedWarehouse] = useState('')
   const [catalogs, setCatalogs] = useState<Catalog[]>([])
@@ -129,6 +130,7 @@ export default function SampleDataGenerator() {
             row_count: rowCount,
             warehouse_id: selectedWarehouse,
             include_descriptions: includeDescriptions,
+            category: selectedCategory || null,
           })
           setTableResults((prev) => [
             ...prev,
@@ -165,6 +167,7 @@ export default function SampleDataGenerator() {
         row_count: rowCount,
         warehouse_id: selectedWarehouse,
         include_descriptions: includeDescriptions,
+        category: selectedCategory || null,
       })
       setTableResults((prev) => [
         ...prev,
@@ -215,15 +218,15 @@ export default function SampleDataGenerator() {
           return (
             <div key={s.key} className="flex items-center gap-2">
               {i > 0 && (
-                <div className={`w-8 h-px ${isDone || isActive ? 'bg-[#D0A33C]' : 'bg-[var(--border)]'}`} />
+                <div className={`w-8 h-px ${isDone || isActive ? 'bg-[#6366F1]' : 'bg-[var(--border)]'}`} />
               )}
               <div className="flex items-center gap-1.5">
                 <div
                   className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
                     isDone
-                      ? 'bg-[#D0A33C] text-white'
+                      ? 'bg-[#6366F1] text-white'
                       : isActive
-                        ? 'bg-[#D0A33C]/20 text-[#D0A33C] border border-[#D0A33C]'
+                        ? 'bg-[#6366F1]/20 text-[#6366F1] border border-[#6366F1]'
                         : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border border-[var(--border)]'
                   }`}
                 >
@@ -262,10 +265,10 @@ export default function SampleDataGenerator() {
                 return (
                   <button
                     key={ind.id}
-                    onClick={() => setSelectedIndustry(ind)}
+                    onClick={() => { setSelectedIndustry(ind); setSelectedCategory('') }}
                     className={`text-left p-4 rounded-xl border transition-all ${
                       isSelected
-                        ? 'bg-[#D0A33C]/10 border-[#D0A33C]/40 shadow-md'
+                        ? 'bg-[#6366F1]/10 border-[#6366F1]/40 shadow-md'
                         : 'bg-[var(--bg-secondary)] border-[var(--border)] hover:border-[var(--text-secondary)]'
                     }`}
                   >
@@ -278,7 +281,7 @@ export default function SampleDataGenerator() {
                           <p className="text-sm font-semibold text-[var(--text-primary)]">
                             {ind.label}
                           </p>
-                          {isSelected && <Check className="w-4 h-4 text-[#D0A33C]" />}
+                          {isSelected && <Check className="w-4 h-4 text-[#6366F1]" />}
                         </div>
                         <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 leading-snug">
                           {ind.description}
@@ -300,11 +303,36 @@ export default function SampleDataGenerator() {
               })}
             </div>
           )}
+          {selectedIndustry && selectedIndustry.categories.length > 0 && (
+            <div className="pt-4">
+              <label className="block text-sm font-medium text-[var(--text-primary)] mb-1.5">
+                Sub-category <span className="text-[var(--text-secondary)] font-normal">(optional)</span>
+              </label>
+              <p className="text-[11px] text-[var(--text-secondary)] mb-2 leading-snug">
+                Theme the generated data toward a specific business type. Leave blank for generic {selectedIndustry.label.toLowerCase()} data.
+              </p>
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#6366F1]"
+              >
+                <option value="">None — generic {selectedIndustry.label}</option>
+                {selectedIndustry.categories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.label}</option>
+                ))}
+              </select>
+              {selectedCategory && (
+                <p className="text-[11px] text-[var(--text-secondary)] mt-1.5 leading-snug">
+                  {selectedIndustry.categories.find((c) => c.id === selectedCategory)?.description}
+                </p>
+              )}
+            </div>
+          )}
           <div className="flex justify-end pt-4">
             <button
               onClick={() => setStep('location')}
               disabled={!selectedIndustry}
-              className="px-5 py-2.5 rounded-lg bg-[#D0A33C] hover:bg-[#b88d2e] text-white text-sm font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              className="px-5 py-2.5 rounded-lg bg-[#6366F1] hover:bg-[#4F46E5] text-white text-sm font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             >
               Next: Choose Location
             </button>
@@ -328,7 +356,7 @@ export default function SampleDataGenerator() {
             <select
               value={selectedWarehouse}
               onChange={(e) => setSelectedWarehouse(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#D0A33C]"
+              className="w-full px-3 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#6366F1]"
             >
               <option value="">Select a warehouse...</option>
               {warehouses.map((wh) => (
@@ -347,7 +375,7 @@ export default function SampleDataGenerator() {
             <select
               value={selectedCatalog}
               onChange={(e) => setSelectedCatalog(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#D0A33C]"
+              className="w-full px-3 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#6366F1]"
             >
               <option value="">Select a catalog...</option>
               {catalogs.map((c) => (
@@ -368,7 +396,7 @@ export default function SampleDataGenerator() {
                 onClick={() => setCreateNewSchema(false)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                   !createNewSchema
-                    ? 'bg-[#D0A33C]/15 text-[#D0A33C] border border-[#D0A33C]/30'
+                    ? 'bg-[#6366F1]/15 text-[#6366F1] border border-[#6366F1]/30'
                     : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border border-[var(--border)]'
                 }`}
               >
@@ -378,7 +406,7 @@ export default function SampleDataGenerator() {
                 onClick={() => setCreateNewSchema(true)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                   createNewSchema
-                    ? 'bg-[#D0A33C]/15 text-[#D0A33C] border border-[#D0A33C]/30'
+                    ? 'bg-[#6366F1]/15 text-[#6366F1] border border-[#6366F1]/30'
                     : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border border-[var(--border)]'
                 }`}
               >
@@ -391,14 +419,14 @@ export default function SampleDataGenerator() {
                 value={newSchemaName}
                 onChange={(e) => setNewSchemaName(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
                 placeholder={`e.g. ${selectedIndustry?.id || 'sample'}_data`}
-                className="w-full px-3 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#D0A33C]"
+                className="w-full px-3 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#6366F1]"
               />
             ) : (
               <select
                 value={selectedSchema}
                 onChange={(e) => setSelectedSchema(e.target.value)}
                 disabled={!selectedCatalog}
-                className="w-full px-3 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#D0A33C] disabled:opacity-50"
+                className="w-full px-3 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#6366F1] disabled:opacity-50"
               >
                 <option value="">{selectedCatalog ? 'Select a schema...' : 'Choose a catalog first'}</option>
                 {schemas.map((s) => (
@@ -436,7 +464,7 @@ export default function SampleDataGenerator() {
             <button
               onClick={() => setStep('config')}
               disabled={!canProceedLocation}
-              className="px-5 py-2.5 rounded-lg bg-[#D0A33C] hover:bg-[#b88d2e] text-white text-sm font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              className="px-5 py-2.5 rounded-lg bg-[#6366F1] hover:bg-[#4F46E5] text-white text-sm font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             >
               Next: Configure
             </button>
@@ -455,7 +483,7 @@ export default function SampleDataGenerator() {
           {/* Summary card */}
           <div className="p-4 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] space-y-2">
             <div className="flex items-center gap-2">
-              <IndustryIcon className="w-4 h-4 text-[#D0A33C]" />
+              <IndustryIcon className="w-4 h-4 text-[#6366F1]" />
               <span className="text-sm font-semibold text-[var(--text-primary)]">{selectedIndustry?.label}</span>
             </div>
             <p className="text-xs text-[var(--text-secondary)]">
@@ -473,14 +501,14 @@ export default function SampleDataGenerator() {
                 type="date"
                 value={dateStart}
                 onChange={(e) => setDateStart(e.target.value)}
-                className="flex-1 px-3 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#D0A33C]"
+                className="flex-1 px-3 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#6366F1]"
               />
               <span className="text-sm text-[var(--text-secondary)]">to</span>
               <input
                 type="date"
                 value={dateEnd}
                 onChange={(e) => setDateEnd(e.target.value)}
-                className="flex-1 px-3 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#D0A33C]"
+                className="flex-1 px-3 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#6366F1]"
               />
             </div>
           </div>
@@ -497,7 +525,7 @@ export default function SampleDataGenerator() {
                   onClick={() => setRowCount(n)}
                   className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
                     rowCount === n
-                      ? 'bg-[#D0A33C]/15 text-[#D0A33C] border border-[#D0A33C]/30'
+                      ? 'bg-[#6366F1]/15 text-[#6366F1] border border-[#6366F1]/30'
                       : 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border border-[var(--border)] hover:border-[var(--text-secondary)]'
                   }`}
                 >
@@ -509,21 +537,21 @@ export default function SampleDataGenerator() {
               type="number"
               value={rowCount}
               onChange={(e) => setRowCount(Math.max(10, Math.min(100000, parseInt(e.target.value) || 100)))}
-              className="mt-2 w-32 px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#D0A33C]"
+              className="mt-2 w-32 px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm text-[var(--text-primary)] focus:outline-none focus:border-[#6366F1]"
               min={10}
               max={100000}
             />
           </div>
 
           {/* Final summary */}
-          <div className="p-4 rounded-xl bg-gradient-to-br from-[#D0A33C]/5 to-[#3F1F14]/5 border border-[#D0A33C]/15">
+          <div className="p-4 rounded-xl bg-gradient-to-br from-[#6366F1]/5 to-[#4338CA]/5 border border-[#6366F1]/15">
             <p className="text-xs font-semibold text-[var(--text-primary)] mb-2">Summary</p>
             <ul className="space-y-1 text-xs text-[var(--text-secondary)]">
-              <li><span className="text-[#D0A33C] mr-1">&#x2022;</span> Industry: <span className="text-[var(--text-primary)] font-medium">{selectedIndustry?.label}</span></li>
-              <li><span className="text-[#D0A33C] mr-1">&#x2022;</span> Location: <span className="font-mono text-[var(--text-primary)]">{selectedCatalog}.{schemaName}</span></li>
-              <li><span className="text-[#D0A33C] mr-1">&#x2022;</span> Tables: <span className="text-[var(--text-primary)] font-medium">{selectedIndustry?.tables.join(', ')}</span></li>
-              <li><span className="text-[#D0A33C] mr-1">&#x2022;</span> Date range: <span className="text-[var(--text-primary)]">{dateStart} to {dateEnd}</span></li>
-              <li><span className="text-[#D0A33C] mr-1">&#x2022;</span> ~{rowCount.toLocaleString()} rows per table</li>
+              <li><span className="text-[#6366F1] mr-1">&#x2022;</span> Industry: <span className="text-[var(--text-primary)] font-medium">{selectedIndustry?.label}</span></li>
+              <li><span className="text-[#6366F1] mr-1">&#x2022;</span> Location: <span className="font-mono text-[var(--text-primary)]">{selectedCatalog}.{schemaName}</span></li>
+              <li><span className="text-[#6366F1] mr-1">&#x2022;</span> Tables: <span className="text-[var(--text-primary)] font-medium">{selectedIndustry?.tables.join(', ')}</span></li>
+              <li><span className="text-[#6366F1] mr-1">&#x2022;</span> Date range: <span className="text-[var(--text-primary)]">{dateStart} to {dateEnd}</span></li>
+              <li><span className="text-[#6366F1] mr-1">&#x2022;</span> ~{rowCount.toLocaleString()} rows per table</li>
             </ul>
           </div>
 
@@ -536,7 +564,7 @@ export default function SampleDataGenerator() {
             </button>
             <button
               onClick={() => setStep('descriptions')}
-              className="px-5 py-2.5 rounded-lg bg-[#D0A33C] hover:bg-[#b88d2e] text-white text-sm font-medium transition-colors"
+              className="px-5 py-2.5 rounded-lg bg-[#6366F1] hover:bg-[#4F46E5] text-white text-sm font-medium transition-colors"
             >
               Next: Metadata
             </button>
@@ -559,13 +587,13 @@ export default function SampleDataGenerator() {
               onClick={() => setIncludeDescriptions(false)}
               className={`w-full text-left p-4 rounded-xl border transition-all ${
                 !includeDescriptions
-                  ? 'bg-[var(--bg-secondary)] border-[#D0A33C]/40 shadow-md'
+                  ? 'bg-[var(--bg-secondary)] border-[#6366F1]/40 shadow-md'
                   : 'bg-[var(--bg-secondary)] border-[var(--border)] hover:border-[var(--text-secondary)]'
               }`}
             >
               <div className="flex items-start gap-3">
                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 shrink-0 ${
-                  !includeDescriptions ? 'border-[#D0A33C] bg-[#D0A33C]' : 'border-[var(--border)]'
+                  !includeDescriptions ? 'border-[#6366F1] bg-[#6366F1]' : 'border-[var(--border)]'
                 }`}>
                   {!includeDescriptions && <Check className="w-3 h-3 text-white" />}
                 </div>
@@ -584,20 +612,20 @@ export default function SampleDataGenerator() {
               onClick={() => setIncludeDescriptions(true)}
               className={`w-full text-left p-4 rounded-xl border transition-all ${
                 includeDescriptions
-                  ? 'bg-[var(--bg-secondary)] border-[#D0A33C]/40 shadow-md'
+                  ? 'bg-[var(--bg-secondary)] border-[#6366F1]/40 shadow-md'
                   : 'bg-[var(--bg-secondary)] border-[var(--border)] hover:border-[var(--text-secondary)]'
               }`}
             >
               <div className="flex items-start gap-3">
                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 shrink-0 ${
-                  includeDescriptions ? 'border-[#D0A33C] bg-[#D0A33C]' : 'border-[var(--border)]'
+                  includeDescriptions ? 'border-[#6366F1] bg-[#6366F1]' : 'border-[var(--border)]'
                 }`}>
                   {includeDescriptions && <Check className="w-3 h-3 text-white" />}
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-[var(--text-primary)]">
                     Auto-generate descriptions
-                    <span className="ml-2 text-[10px] font-medium text-[#D0A33C] bg-[#D0A33C]/10 px-1.5 py-0.5 rounded uppercase">Recommended</span>
+                    <span className="ml-2 text-[10px] font-medium text-[#6366F1] bg-[#6366F1]/10 px-1.5 py-0.5 rounded uppercase">Recommended</span>
                   </p>
                   <p className="text-xs text-[var(--text-secondary)] mt-0.5">
                     AI will generate table comments and column descriptions after creating each table.
@@ -628,15 +656,15 @@ export default function SampleDataGenerator() {
           </div>
 
           {/* Final summary */}
-          <div className="p-4 rounded-xl bg-gradient-to-br from-[#D0A33C]/5 to-[#3F1F14]/5 border border-[#D0A33C]/15">
+          <div className="p-4 rounded-xl bg-gradient-to-br from-[#6366F1]/5 to-[#4338CA]/5 border border-[#6366F1]/15">
             <p className="text-xs font-semibold text-[var(--text-primary)] mb-2">Summary</p>
             <ul className="space-y-1 text-xs text-[var(--text-secondary)]">
-              <li><span className="text-[#D0A33C] mr-1">&#x2022;</span> Industry: <span className="text-[var(--text-primary)] font-medium">{selectedIndustry?.label}</span></li>
-              <li><span className="text-[#D0A33C] mr-1">&#x2022;</span> Location: <span className="font-mono text-[var(--text-primary)]">{selectedCatalog}.{schemaName}</span></li>
-              <li><span className="text-[#D0A33C] mr-1">&#x2022;</span> Tables: <span className="text-[var(--text-primary)] font-medium">{selectedIndustry?.tables.join(', ')}</span></li>
-              <li><span className="text-[#D0A33C] mr-1">&#x2022;</span> Date range: <span className="text-[var(--text-primary)]">{dateStart} to {dateEnd}</span></li>
-              <li><span className="text-[#D0A33C] mr-1">&#x2022;</span> ~{rowCount.toLocaleString()} rows per table</li>
-              <li><span className="text-[#D0A33C] mr-1">&#x2022;</span> Descriptions: <span className="text-[var(--text-primary)] font-medium">{includeDescriptions ? 'Auto-generated' : 'None (add later)'}</span></li>
+              <li><span className="text-[#6366F1] mr-1">&#x2022;</span> Industry: <span className="text-[var(--text-primary)] font-medium">{selectedIndustry?.label}</span></li>
+              <li><span className="text-[#6366F1] mr-1">&#x2022;</span> Location: <span className="font-mono text-[var(--text-primary)]">{selectedCatalog}.{schemaName}</span></li>
+              <li><span className="text-[#6366F1] mr-1">&#x2022;</span> Tables: <span className="text-[var(--text-primary)] font-medium">{selectedIndustry?.tables.join(', ')}</span></li>
+              <li><span className="text-[#6366F1] mr-1">&#x2022;</span> Date range: <span className="text-[var(--text-primary)]">{dateStart} to {dateEnd}</span></li>
+              <li><span className="text-[#6366F1] mr-1">&#x2022;</span> ~{rowCount.toLocaleString()} rows per table</li>
+              <li><span className="text-[#6366F1] mr-1">&#x2022;</span> Descriptions: <span className="text-[var(--text-primary)] font-medium">{includeDescriptions ? 'Auto-generated' : 'None (add later)'}</span></li>
             </ul>
           </div>
 
@@ -649,7 +677,7 @@ export default function SampleDataGenerator() {
             </button>
             <button
               onClick={handleGenerate}
-              className="px-5 py-2.5 rounded-lg bg-[#D0A33C] hover:bg-[#b88d2e] text-white text-sm font-medium transition-colors flex items-center gap-2"
+              className="px-5 py-2.5 rounded-lg bg-[#6366F1] hover:bg-[#4F46E5] text-white text-sm font-medium transition-colors flex items-center gap-2"
             >
               <Sparkles className="w-4 h-4" />
               Generate {selectedIndustry?.tables.length} Tables
@@ -685,7 +713,7 @@ export default function SampleDataGenerator() {
                       : result?.status === 'FAILED'
                         ? 'bg-red-500/5 border-red-500/20'
                         : isCurrentlyGenerating
-                          ? 'bg-[#D0A33C]/5 border-[#D0A33C]/20'
+                          ? 'bg-[#6366F1]/5 border-[#6366F1]/20'
                           : 'bg-[var(--bg-secondary)] border-[var(--border)]'
                   }`}
                 >
@@ -699,8 +727,8 @@ export default function SampleDataGenerator() {
                         <X className="w-4 h-4 text-red-500" />
                       </div>
                     ) : isCurrentlyGenerating ? (
-                      <div className="w-8 h-8 rounded-lg bg-[#D0A33C]/15 flex items-center justify-center">
-                        <Loader2 className="w-4 h-4 text-[#D0A33C] animate-spin" />
+                      <div className="w-8 h-8 rounded-lg bg-[#6366F1]/15 flex items-center justify-center">
+                        <Loader2 className="w-4 h-4 text-[#6366F1] animate-spin" />
                       </div>
                     ) : (
                       <div className="w-8 h-8 rounded-lg bg-[var(--bg-tertiary)] flex items-center justify-center">
@@ -731,14 +759,14 @@ export default function SampleDataGenerator() {
                         <button
                           onClick={() => retryTable(tableName)}
                           disabled={generating}
-                          className="text-[10px] font-semibold text-[#D0A33C] bg-[#D0A33C]/10 px-2 py-1 rounded hover:bg-[#D0A33C]/20 transition-colors disabled:opacity-50"
+                          className="text-[10px] font-semibold text-[#6366F1] bg-[#6366F1]/10 px-2 py-1 rounded hover:bg-[#6366F1]/20 transition-colors disabled:opacity-50"
                         >
                           Retry
                         </button>
                       </div>
                     )}
                     {isCurrentlyGenerating && (
-                      <span className="text-[10px] font-semibold text-[#D0A33C] bg-[#D0A33C]/10 px-2 py-1 rounded uppercase">Generating...</span>
+                      <span className="text-[10px] font-semibold text-[#6366F1] bg-[#6366F1]/10 px-2 py-1 rounded uppercase">Generating...</span>
                     )}
                     {isPending && (
                       <span className="text-[10px] font-medium text-[var(--text-secondary)] opacity-40">Pending</span>
@@ -784,14 +812,14 @@ export default function SampleDataGenerator() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => navigate('/')}
-                  className="flex-1 py-2.5 rounded-lg bg-[#D0A33C] hover:bg-[#b88d2e] text-white text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                  className="flex-1 py-2.5 rounded-lg bg-[#6366F1] hover:bg-[#4F46E5] text-white text-sm font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   <Check className="w-4 h-4" />
                   Done
                 </button>
                 <button
                   onClick={() => navigate('/create')}
-                  className="py-2.5 px-4 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] hover:border-[#D0A33C]/40 transition-colors"
+                  className="py-2.5 px-4 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] hover:border-[#6366F1]/40 transition-colors"
                 >
                   Create Genie Room
                 </button>

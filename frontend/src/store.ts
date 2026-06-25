@@ -6,6 +6,8 @@ interface AppState {
   removeTable: (fullName: string) => void;
   clearTables: () => void;
   toggleTable: (fullName: string) => void;
+  addTables: (fullNames: string[]) => void;
+  removeTables: (fullNames: string[]) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -29,4 +31,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ selectedTables: [...selectedTables, fullName] });
     }
   },
+  addTables: (fullNames) =>
+    set((s) => {
+      const existing = new Set(s.selectedTables);
+      const additions = fullNames.filter((n) => !existing.has(n));
+      return additions.length
+        ? { selectedTables: [...s.selectedTables, ...additions] }
+        : s;
+    }),
+  removeTables: (fullNames) =>
+    set((s) => {
+      const drop = new Set(fullNames);
+      return { selectedTables: s.selectedTables.filter((t) => !drop.has(t)) };
+    }),
 }));

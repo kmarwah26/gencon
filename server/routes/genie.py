@@ -2,18 +2,19 @@ import json
 import asyncio
 import uuid
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from server.config import get_workspace_host, get_auth_headers
+from server.routes.filters import compute_scope, format_constraint_prefix, _current_user_email
 
 router = APIRouter(tags=["genie"])
 
 API_PREFIX = "/api/2.0/genie/spaces"
 
 
-def _client() -> tuple[str, dict]:
+def _client(request: Request | None = None) -> tuple[str, dict]:
     host = get_workspace_host()
-    headers = get_auth_headers()
+    headers = get_auth_headers(request)
     return host, headers
 
 
@@ -132,8 +133,8 @@ def _parse_room_detail(data: dict) -> dict:
 
 
 @router.get("/genie/rooms")
-async def list_genie_rooms():
-    host, headers = _client()
+async def list_genie_rooms(request: Request):
+    host, headers = _client(request)
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(
@@ -162,8 +163,8 @@ async def list_genie_rooms():
 
 
 @router.post("/genie/rooms")
-async def create_genie_room(req: CreateRoomRequest):
-    host, headers = _client()
+async def create_genie_room(req: CreateRoomRequest, request: Request):
+    host, headers = _client(request)
 
     serialized_space = _build_serialized_space(
         table_identifiers=req.table_identifiers,
@@ -182,7 +183,7 @@ async def create_genie_room(req: CreateRoomRequest):
     if not wh_id:
         try:
             from server.config import get_workspace_client
-            wc = get_workspace_client()
+            wc = get_workspace_client(request)
             for wh in wc.warehouses.list():
                 state = str(wh.state) if wh.state else ""
                 if "RUNNING" in state or "STARTING" in state:
@@ -214,8 +215,8 @@ async def create_genie_room(req: CreateRoomRequest):
 
 
 @router.get("/genie/rooms/{room_id}")
-async def get_genie_room(room_id: str):
-    host, headers = _client()
+async def get_genie_room(room_id: str, request: Request):
+    host, headers = _client(request)
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(
@@ -236,8 +237,8 @@ async def get_genie_room(room_id: str):
 
 
 @router.patch("/genie/rooms/{room_id}")
-async def update_genie_room(room_id: str, req: UpdateRoomRequest):
-    host, headers = _client()
+async def update_genie_room(room_id: str, req: UpdateRoomRequest, request: Request):
+    host, headers = _client(request)
     body: dict = {}
 
     if req.title is not None:
@@ -304,8 +305,8 @@ async def update_genie_room(room_id: str, req: UpdateRoomRequest):
 
 
 @router.delete("/genie/rooms/{room_id}")
-async def delete_genie_room(room_id: str):
-    host, headers = _client()
+async def delete_genie_room(room_id: str, request: Request):
+    host, headers = _client(request)
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.delete(
@@ -330,8 +331,8 @@ class ExecuteSqlRequest(BaseModel):
 
 
 @router.post("/execute-sql")
-async def execute_sql(req: ExecuteSqlRequest):
-    host, headers = _client()
+async def execute_sql(req: ExecuteSqlRequest, request: Request):
+    host, headers = _client(request)
     try:
         async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(
@@ -372,15 +373,29 @@ async def execute_sql(req: ExecuteSqlRequest):
 # ── Start Conversation ──
 
 
+async def _apply_row_filter(request: Request, room_id: str, content: str) -> str:
+    """Compute current user's scope; block if needed; prepend constraint to content."""
+    user_email = _current_user_email(request).lower()
+    scope = await compute_scope(request, room_id, user_email)
+    if scope.get("has_columns") and scope.get("blocked"):
+        raise HTTPException(
+            status_code=403,
+            detail="No filter scope assigned for this room — ask the room owner for access.",
+        )
+    prefix = format_constraint_prefix(scope.get("values", {}))
+    return f"{prefix}{content}" if prefix else content
+
+
 @router.post("/genie/rooms/{room_id}/conversations")
-async def start_conversation(room_id: str, req: SendMessageRequest):
-    host, headers = _client()
+async def start_conversation(room_id: str, req: SendMessageRequest, request: Request):
+    host, headers = _client(request)
+    content = await _apply_row_filter(request, room_id, req.content)
     try:
         async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(
                 f"{host}{API_PREFIX}/{room_id}/start-conversation",
                 headers=headers,
-                json={"content": req.content},
+                json={"content": content},
             )
             resp.raise_for_status()
             data = resp.json()
@@ -406,14 +421,15 @@ async def start_conversation(room_id: str, req: SendMessageRequest):
 
 
 @router.post("/genie/rooms/{room_id}/conversations/{conversation_id}/messages")
-async def send_message(room_id: str, conversation_id: str, req: SendMessageRequest):
-    host, headers = _client()
+async def send_message(room_id: str, conversation_id: str, req: SendMessageRequest, request: Request):
+    host, headers = _client(request)
+    content = await _apply_row_filter(request, room_id, req.content)
     try:
         async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(
                 f"{host}{API_PREFIX}/{room_id}/conversations/{conversation_id}/messages",
                 headers=headers,
-                json={"content": req.content},
+                json={"content": content},
             )
             resp.raise_for_status()
             data = resp.json()
@@ -440,8 +456,8 @@ async def send_message(room_id: str, conversation_id: str, req: SendMessageReque
 @router.get(
     "/genie/rooms/{room_id}/conversations/{conversation_id}/messages/{message_id}"
 )
-async def get_message(room_id: str, conversation_id: str, message_id: str):
-    host, headers = _client()
+async def get_message(room_id: str, conversation_id: str, message_id: str, request: Request):
+    host, headers = _client(request)
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(
@@ -462,8 +478,8 @@ async def get_message(room_id: str, conversation_id: str, message_id: str):
 @router.get(
     "/genie/rooms/{room_id}/conversations/{conversation_id}/messages/{message_id}/query-result"
 )
-async def get_query_result(room_id: str, conversation_id: str, message_id: str):
-    host, headers = _client()
+async def get_query_result(room_id: str, conversation_id: str, message_id: str, request: Request):
+    host, headers = _client(request)
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(
