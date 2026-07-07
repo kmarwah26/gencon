@@ -4,7 +4,7 @@ import uuid
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from server.config import get_workspace_host, get_auth_headers
+from server.config import get_workspace_host, get_auth_headers, OBO_REAUTH_MESSAGE
 from server.routes.filters import compute_scope, format_constraint_prefix, _current_user_email
 
 router = APIRouter(tags=["genie"])
@@ -154,6 +154,8 @@ async def list_genie_rooms(request: Request):
                 })
             return {"rooms": rooms}
     except httpx.HTTPStatusError as e:
+        if e.response.status_code == 403:
+            raise HTTPException(status_code=403, detail=OBO_REAUTH_MESSAGE)
         raise HTTPException(status_code=e.response.status_code, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

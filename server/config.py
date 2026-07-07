@@ -91,3 +91,15 @@ def get_user_auth_headers(request) -> dict | None:
     """
     token = get_user_token(request)
     return {"Authorization": f"Bearer {token}"} if token else None
+
+
+# Message shown when an OBO call is rejected for lack of scope. A 403 here almost
+# always means the app's user_api_scopes changed after this user last consented,
+# so their forwarded token predates the scope and can't be fixed in code — the
+# user must re-authorize. Surfacing this verbatim beats a raw "403 Forbidden".
+OBO_REAUTH_MESSAGE = (
+    "Access denied (403): your session is missing the required permission. "
+    "Sign out and reopen the app to re-authorize (accept the permissions "
+    "prompt). If it persists, ask an admin to confirm the app's user "
+    "authorization scopes include Genie and SQL warehouse access."
+)
