@@ -204,6 +204,7 @@ export const api = {
     request<{ started: boolean }>(`/warehouses/${warehouseId}/start`, { method: 'POST' }),
 
   getCurrentUser: () => request<CurrentUser>('/me'),
+  getLogoutUrl: () => request<{ logout_url: string }>('/logout-url'),
   getServices: () => request<{ services: ServiceStatus[] }>('/services'),
   listGenieRooms: () => request<{ rooms: GenieRoom[] }>('/genie/rooms'),
   createGenieRoom: (data: {

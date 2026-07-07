@@ -3,7 +3,7 @@ import { Routes, Route, useNavigate, useLocation, Link } from 'react-router-dom'
 import {
   Database, Plus, MessageSquare, Sparkles, Network,
   User, ArrowLeft, ArrowRight, Pencil, Trash2, Loader2,
-  Zap, TrendingUp,
+  Zap, TrendingUp, LogOut, HelpCircle, X,
 } from 'lucide-react'
 import { api } from './api'
 import type { CurrentUser } from './api'
@@ -67,6 +67,7 @@ export default function App() {
               <span className="text-xs text-[var(--text-secondary)]">Loading...</span>
             )}
           </div>
+          <AccountMenu />
         </div>
       </header>
 
@@ -91,6 +92,74 @@ export default function App() {
           <Route path="/services" element={<Services />} />
         </Routes>
       </main>
+    </div>
+  )
+}
+
+// Sign out + re-authorize help. Sign out navigates to the workspace logout URL so the
+// Databricks SSO session is cleared; on the user's next visit the Apps proxy re-mints
+// their forwarded token against the app's *current* OAuth scopes. This is the only way
+// to pick up scopes added after the user last consented — a page reload keeps the old
+// token (and its old scopes), which is why an in-app "reload" can't fix an OBO 403.
+function AccountMenu() {
+  const [open, setOpen] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
+
+  const signOut = async () => {
+    setSigningOut(true)
+    try {
+      const { logout_url } = await api.getLogoutUrl()
+      if (logout_url) {
+        window.location.href = logout_url
+        return
+      }
+    } catch { /* fall through to help panel */ }
+    // No logout URL (e.g. local dev) — keep the panel open so the user sees the
+    // manual re-authorize steps instead of a silent no-op.
+    setSigningOut(false)
+    setOpen(true)
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        title="Account & access"
+        className="p-2 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] transition-colors"
+      >
+        <HelpCircle className="w-4 h-4" />
+      </button>
+
+      {open && (
+        <>
+          {/* click-away backdrop */}
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 mt-2 w-80 z-50 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] shadow-2xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">Access &amp; sign-in</h3>
+              <button onClick={() => setOpen(false)} className="p-1 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed mb-3">
+              Seeing empty lists or an “access denied” error? Your sign-in may predate a
+              permissions change. Sign out and back in to re-authorize.
+            </p>
+            <button
+              onClick={signOut}
+              disabled={signingOut}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#6366F1] hover:bg-[#4F46E5] text-white text-sm font-semibold transition-colors disabled:opacity-50"
+            >
+              {signingOut ? <><Loader2 className="w-4 h-4 animate-spin" /> Signing out…</> : <><LogOut className="w-4 h-4" /> Sign out &amp; re-authorize</>}
+            </button>
+            <p className="text-[10px] text-[var(--text-secondary)] leading-relaxed mt-3">
+              If sign-out doesn’t prompt for permissions, open the app in a private/incognito
+              window (or a different browser) and sign in there — that forces a fresh
+              authorization.
+            </p>
+          </div>
+        </>
+      )}
     </div>
   )
 }

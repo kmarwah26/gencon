@@ -40,6 +40,23 @@ async def get_current_user(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/logout-url")
+async def get_logout_url():
+    """Workspace sign-out URL used to force a fresh SSO session (and OBO token re-mint).
+
+    A plain page reload reuses the already-minted forwarded token, so it can't pick up
+    OAuth scopes added after the user last consented. Sending the user through the
+    workspace logout clears the Databricks session; on their next visit the Apps proxy
+    re-mints the token against the app's *current* scopes — which is what clears an OBO
+    403 after scopes change. The app can't clear the Databricks-domain cookie itself
+    (different origin), so the frontend navigates the top-level window here.
+    """
+    host = get_workspace_host().rstrip("/")
+    # /login.html?logout=true is the workspace sign-out entry point; after logout the
+    # user lands on the sign-in page and re-authenticates (re-consenting to new scopes).
+    return {"logout_url": f"{host}/login.html?logout=true" if host else ""}
+
+
 @router.get("/services")
 async def get_services():
     """Report all connected services and their status."""
