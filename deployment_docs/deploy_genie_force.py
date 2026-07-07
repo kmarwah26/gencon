@@ -215,6 +215,9 @@ except Exception:
             name=APP_NAME,
             description=APP_DESCRIPTION,
             git_repository=_git_repo,
+            # Set OBO scopes at creation so a brand-new app requests them from the
+            # first visit. Step 3c re-asserts them (and covers already-existing apps).
+            user_api_scopes=USER_API_SCOPES,
         )
     )
     print(f"  App created!")
@@ -497,9 +500,8 @@ for s in USER_API_SCOPES:
 # Use the SDK update (PATCH under the hood). The old raw PUT fallback always 404'd
 # ("No API found for PUT /apps/..."), and a raw PATCH fails with "Git repository is
 # required" unless git_repository is included — so we always pass it along.
-scopes_ok = False
 try:
-    updated = w.apps.update(
+    w.apps.update(
         name=APP_NAME,
         app=App(
             name=APP_NAME,
@@ -507,18 +509,30 @@ try:
             git_repository=GitRepository(url=GIT_REPO_URL, provider=GIT_PROVIDER),
         ),
     )
-    scopes_ok = True
-    print(f"\n  Applied: {updated.user_api_scopes or USER_API_SCOPES}")
 except Exception as e:
     print(f"  update failed: {e}")
 
-if not scopes_ok:
-    print("\n  WARNING: Could not set OBO scopes automatically.")
-    print("  Set them via the App's Authorization settings (UI), or run:")
-    print(f"    databricks apps update {APP_NAME} --json '{{\"user_api_scopes\": {USER_API_SCOPES}}}'")
+# Verify by RE-FETCHING the app rather than trusting the update's echoed response.
+# An update can appear to succeed yet not persist the scopes; re-reading is the only
+# way to know what will actually be requested from users. Report the exact missing set.
+applied = list(w.apps.get(name=APP_NAME).user_api_scopes or [])
+missing = [s for s in USER_API_SCOPES if s not in applied]
+scopes_ok = not missing
 
-print("\n  NOTE: Existing users must RE-CONSENT on their next visit after scopes change,")
-print("  otherwise newly added scopes won't activate on their token (calls fall back to the SP).")
+print(f"\n  Scopes now on app: {applied}")
+if scopes_ok:
+    print("  All requested OBO scopes are set.")
+else:
+    print(f"\n  WARNING: these scopes did NOT stick: {missing}")
+    print("  Set them via the App's Authorization settings (UI: Apps > app > Edit >")
+    print("  User authorization > Add scope), or from a workspace notebook:")
+    print(f"    w.apps.update(name='{APP_NAME}', app=App(name='{APP_NAME}',")
+    print(f"        user_api_scopes={USER_API_SCOPES},")
+    print(f"        git_repository=GitRepository(url='{GIT_REPO_URL}', provider='{GIT_PROVIDER}')))")
+
+print("\n  NOTE: Existing users must RE-CONSENT on their next visit after scopes change")
+print("  (open the app > help '?' menu > Sign out & re-authorize, or an incognito window).")
+print("  Without a scope delta there is no consent prompt and the 403 persists.")
 
 # COMMAND ----------
 
