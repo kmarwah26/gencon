@@ -37,6 +37,7 @@ export default function CreateRoom() {
   const [description, setDescription] = useState('')
   const [warehouses, setWarehouses] = useState<WarehouseType[]>([])
   const [warehouseId, setWarehouseId] = useState('')
+  const [warehouseError, setWarehouseError] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
   const navigate = useNavigate()
@@ -109,9 +110,10 @@ export default function CreateRoom() {
   useEffect(() => {
     api.listWarehouses().then((r) => {
       setWarehouses(r.warehouses)
+      setWarehouseError('')
       const running = r.warehouses.find((w) => w.state.includes('RUNNING'))
       if (running) setWarehouseId(running.id)
-    }).catch(() => {})
+    }).catch((e: any) => setWarehouseError(e.message || 'Failed to load SQL warehouses'))
   }, [])
 
   const openPicker = useCallback(() => {
@@ -387,7 +389,9 @@ export default function CreateRoom() {
               <option value="">{warehouses.length === 0 ? 'Loading warehouses...' : 'Select a warehouse'}</option>
               {warehouses.map((wh) => (<option key={wh.id} value={wh.id}>{wh.name} ({wh.state.replace('STATE_', '').replace('State.', '')})</option>))}
             </select>
-            {warehouses.length === 0 && (
+            {warehouseError ? (
+              <p className="text-xs text-red-500 mt-1">{warehouseError}</p>
+            ) : warehouses.length === 0 && (
               <p className="text-xs text-amber-600 mt-1">No SQL warehouses found. Ensure your workspace has at least one SQL warehouse.</p>
             )}
           </div>

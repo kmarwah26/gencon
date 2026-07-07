@@ -6,10 +6,14 @@
 # MAGIC This notebook deploys the **Genie-Force** app to your Databricks workspace.
 # MAGIC
 # MAGIC **Prerequisites:**
-# MAGIC - The Genie-Force source code must be in a Git folder in your workspace (this notebook must be inside the repo)
-# MAGIC - The `frontend/dist/` directory must be pre-built and committed to the repo
+# MAGIC - This notebook can run from anywhere in the workspace — it does **not** need to
+# MAGIC   live inside a Workspace Git folder. The app deploys straight from the Git repo
+# MAGIC   configured below (`GIT_REPO_URL` / `GIT_BRANCH`).
+# MAGIC - The `frontend/dist/` directory must be pre-built and committed to that repo
 # MAGIC - Your workspace must have **serverless compute** enabled
 # MAGIC - At least one SQL warehouse must exist (it will be auto-started if stopped)
+# MAGIC - If the repo is **private**, the app's service principal needs a Git credential
+# MAGIC   configured for your Git provider (public repos need nothing)
 # MAGIC
 # MAGIC **What this notebook does:**
 # MAGIC 1. Creates a Lakebase instance (`genco-cache`)
@@ -52,6 +56,14 @@ LAKEBASE_INSTANCE = "genco-cache"
 LAKEBASE_CAPACITY = "CU_1"  # CU_1, CU_2, CU_4, CU_8
 DATABASE_NAME = "genco"
 RESOURCE_NAME = "genco-cache-db"
+
+# Git source for the app. Databricks Apps deploy directly from a Git repo — no
+# Workspace Git folder / Repos clone is needed, and this is required in workspaces
+# where the admin policy is "only allow app deployments from Git". The repo below
+# is public, so no Git credentials are needed on the app's service principal.
+GIT_REPO_URL = "https://github.com/kmarwah26/gencon.git"
+GIT_BRANCH = "main"
+GIT_PROVIDER = "gitHub"  # gitHub | gitLab | bitbucketCloud | azureDevOpsServices
 
 # On-Behalf-Of-User (OBO) OAuth scopes the app requests. Each user consents on first
 # visit, and user-facing Databricks calls then run with that user's own permissions.
@@ -177,23 +189,37 @@ except Exception as e:
 
 # COMMAND ----------
 
-from databricks.sdk.service.apps import App
+from databricks.sdk.service.apps import App, GitRepository
+
+# The app is bound to a Git repo at creation. This is what lets us deploy from Git
+# (Step 6) in workspaces that forbid Workspace-snapshot deploys.
+_git_repo = GitRepository(url=GIT_REPO_URL, provider=GIT_PROVIDER)
 
 try:
     app = w.apps.get(name=APP_NAME)
     print(f"App '{APP_NAME}' already exists.")
     print(f"  URL: {app.url}")
     print(f"  State: {app.app_status.state if app.app_status else 'N/A'}")
+    # Ensure the existing app points at the Git repo (older deploys may lack it,
+    # which makes every subsequent update fail with "Git repository is required").
+    if not getattr(app, "git_repository", None):
+        try:
+            w.apps.update(name=APP_NAME, app=App(name=APP_NAME, git_repository=_git_repo))
+            print(f"  Attached Git repo to existing app: {GIT_REPO_URL} ({GIT_BRANCH})")
+        except Exception as e:
+            print(f"  Note: could not attach Git repo to existing app: {e}")
 except Exception:
     print(f"Creating app '{APP_NAME}'...")
     app = w.apps.create_and_wait(
         app=App(
             name=APP_NAME,
             description=APP_DESCRIPTION,
+            git_repository=_git_repo,
         )
     )
     print(f"  App created!")
     print(f"  URL: {app.url}")
+    print(f"  Git repo: {GIT_REPO_URL} ({GIT_BRANCH})")
 
 sp_id = app.service_principal_client_id
 sp_numeric_id = str(app.service_principal_id)
@@ -207,12 +233,15 @@ if groups:
     users_group = groups[0]
     try:
         from databricks.sdk.service.iam import Patch, PatchOp, PatchSchema
+        # PatchOp is an enum (ADD/REMOVE/REPLACE); the SCIM operation object is
+        # `Patch(op=..., path=..., value=...)`. The old code called PatchOp(op="add"),
+        # which raised "EnumType.__call__() got an unexpected keyword argument 'op'".
         w.groups.patch(
             id=users_group.id,
             schemas=[PatchSchema.URN_IETF_PARAMS_SCIM_API_MESSAGES_2_0_PATCH_OP],
             operations=[
-                PatchOp(
-                    op="add",
+                Patch(
+                    op=PatchOp.ADD,
                     path="members",
                     value=[{"value": sp_numeric_id}],
                 )
@@ -459,33 +488,29 @@ else:
 
 # COMMAND ----------
 
-import requests as _req
-
-_host = w.config.host.rstrip("/")
-_headers = {**w.config.authenticate(), "Content-Type": "application/json"}
+from databricks.sdk.service.apps import App, GitRepository
 
 print(f"Setting OBO scopes on app '{APP_NAME}':")
 for s in USER_API_SCOPES:
     print(f"  - {s}")
 
+# Use the SDK update (PATCH under the hood). The old raw PUT fallback always 404'd
+# ("No API found for PUT /apps/..."), and a raw PATCH fails with "Git repository is
+# required" unless git_repository is included — so we always pass it along.
 scopes_ok = False
-for method in ("PATCH", "PUT"):
-    try:
-        r = _req.request(
-            method,
-            f"{_host}/api/2.0/apps/{APP_NAME}",
-            headers=_headers,
-            json={"user_api_scopes": USER_API_SCOPES},
-        )
-        if r.status_code < 300:
-            scopes_ok = True
-            applied = r.json().get("user_api_scopes", USER_API_SCOPES)
-            print(f"\n  Applied via {method}: {applied}")
-            break
-        else:
-            print(f"  {method} returned {r.status_code}: {r.text[:200]}")
-    except Exception as e:
-        print(f"  {method} failed: {e}")
+try:
+    updated = w.apps.update(
+        name=APP_NAME,
+        app=App(
+            name=APP_NAME,
+            user_api_scopes=USER_API_SCOPES,
+            git_repository=GitRepository(url=GIT_REPO_URL, provider=GIT_PROVIDER),
+        ),
+    )
+    scopes_ok = True
+    print(f"\n  Applied: {updated.user_api_scopes or USER_API_SCOPES}")
+except Exception as e:
+    print(f"  update failed: {e}")
 
 if not scopes_ok:
     print("\n  WARNING: Could not set OBO scopes automatically.")
@@ -607,79 +632,34 @@ except Exception as e:
 
 # COMMAND ----------
 
-import requests as _req
-
-_host = w.config.host.rstrip("/")
-
-# Try multiple API approaches — the endpoint varies by workspace version
-resource_payload = {
-    "resources": [
-        {
-            "name": RESOURCE_NAME,
-            "description": "Lakebase for saved questions and chat history",
-            "database": {
-                "instance_name": LAKEBASE_INSTANCE,
-                "database_name": DATABASE_NAME,
-                "permission": "CAN_CONNECT_AND_CREATE",
-            },
-        }
-    ]
-}
+# Attach the Lakebase resource via the SDK update (PATCH). We include git_repository
+# so the update succeeds on Git-only workspaces ("Git repository is required" otherwise).
+from databricks.sdk.service.apps import App, AppResource, AppResourceDatabase, GitRepository
 
 updated = False
-for method in ["PATCH", "PUT"]:
-    _headers = {**w.config.authenticate(), "Content-Type": "application/json"}
-    try:
-        _resp = _req.request(
-            method,
-            f"{_host}/api/2.0/apps/{APP_NAME}",
-            headers=_headers,
-            json=resource_payload,
-        )
-        if _resp.status_code < 300:
-            updated = True
-            print(f"  Resource attached via {method} /api/2.0/apps/{APP_NAME}")
-            break
-        elif _resp.status_code == 404:
-            # Try the update endpoint variant
-            _resp2 = _req.request(
-                method,
-                f"{_host}/api/2.0/preview/apps/{APP_NAME}",
-                headers=_headers,
-                json=resource_payload,
-            )
-            if _resp2.status_code < 300:
-                updated = True
-                print(f"  Resource attached via {method} /api/2.0/preview/apps/{APP_NAME}")
-                break
-    except Exception:
-        continue
-
-# Fallback: use SDK update
-if not updated:
-    try:
-        from databricks.sdk.service.apps import App, AppResource, AppResourceDatabase
-        w.apps.update(
+try:
+    w.apps.update(
+        name=APP_NAME,
+        app=App(
             name=APP_NAME,
-            app=App(
-                name=APP_NAME,
-                resources=[
-                    AppResource(
-                        name=RESOURCE_NAME,
-                        description="Lakebase for saved questions and chat history",
-                        database=AppResourceDatabase(
-                            instance_name=LAKEBASE_INSTANCE,
-                            database_name=DATABASE_NAME,
-                            permission="CAN_CONNECT_AND_CREATE",
-                        ),
-                    )
-                ],
-            ),
-        )
-        updated = True
-        print("  Resource attached via SDK update")
-    except Exception as e:
-        print(f"  SDK update failed: {e}")
+            git_repository=GitRepository(url=GIT_REPO_URL, provider=GIT_PROVIDER),
+            resources=[
+                AppResource(
+                    name=RESOURCE_NAME,
+                    description="Lakebase for saved questions and chat history",
+                    database=AppResourceDatabase(
+                        instance_name=LAKEBASE_INSTANCE,
+                        database_name=DATABASE_NAME,
+                        permission="CAN_CONNECT_AND_CREATE",
+                    ),
+                )
+            ],
+        ),
+    )
+    updated = True
+    print("  Resource attached via SDK update")
+except Exception as e:
+    print(f"  SDK update failed: {e}")
 
 if not updated:
     print("  WARNING: Could not attach Lakebase resource automatically.")
@@ -700,52 +680,64 @@ for r in resources:
 # MAGIC %md
 # MAGIC ## Step 6: Deploy the App
 # MAGIC
-# MAGIC Deploys the source code and starts the app.
+# MAGIC Deploys the app **from the Git repo** (`GIT_REPO_URL` @ `GIT_BRANCH`). No Workspace
+# MAGIC Git folder or snapshot is used, so this works in Git-only workspaces. Make sure any
+# MAGIC code changes (including a rebuilt `frontend/dist/`) are pushed to that branch first.
 
 # COMMAND ----------
 
-from databricks.sdk.service.apps import AppDeployment, AppDeploymentMode
-import os
+from databricks.sdk.service.apps import AppDeployment, GitSource, GitRepository
 
-# Derive source path from this notebook's location (parent folder)
-notebook_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
-source_path = str(os.path.dirname(os.path.dirname(notebook_path)))  # go up from deployment_docs/ to repo root
-# Ensure it starts with /Workspace
-if not source_path.startswith("/Workspace"):
-    source_path = f"/Workspace{source_path}"
-print(f"Deploying from: {source_path}")
+# Deploy directly from the Git repo (branch GIT_BRANCH). No Workspace snapshot —
+# this is what works in workspaces with "only allow app deployments from Git".
+print(f"Deploying from Git: {GIT_REPO_URL} @ {GIT_BRANCH}")
 
-# Ensure the app is in a deployable state (start it if needed)
-app = w.apps.get(name=APP_NAME)
-app_state = str(app.app_status.state) if app.app_status else ""
-print(f"  App state: {app_state}")
+# Ensure the app's compute is in a deployable state. Deploy needs the compute
+# STOPPED or RUNNING; while it's transitioning (ACTIVE/STARTING/STOPPING) a
+# start() call is rejected with "compute is in ACTIVE state". So we only start
+# when the compute is actually STOPPED, and otherwise wait for it to settle.
+def _compute_state():
+    a = w.apps.get(name=APP_NAME)
+    return str(a.compute_status.state) if a.compute_status else ""
 
-if "RUNNING" not in app_state:
-    print("  App is not running. Starting it first...")
+compute_state = _compute_state()
+print(f"  Compute state: {compute_state}")
+
+if "STOPPED" in compute_state:
+    print("  Compute is stopped. Starting it first...")
     try:
         w.apps.start(name=APP_NAME)
-        # Wait for the app to reach RUNNING state
-        for _attempt in range(30):
-            time.sleep(10)
-            app = w.apps.get(name=APP_NAME)
-            app_state = str(app.app_status.state) if app.app_status else ""
-            if "RUNNING" in app_state:
-                print(f"  App is now {app_state}")
-                break
-            print(f"  Waiting for app to start... (state: {app_state}, attempt {_attempt + 1})")
-        else:
-            print("  WARNING: App did not reach RUNNING state. Attempting deploy anyway...")
     except Exception as e:
         print(f"  Note: {e}")
-        print("  Attempting deploy anyway...")
 
-deployment = w.apps.deploy_and_wait(
-    app_name=APP_NAME,
-    app_deployment=AppDeployment(
-        source_code_path=source_path,
-        mode=AppDeploymentMode.SNAPSHOT,
-    ),
-)
+# Wait for compute to settle into a terminal state (RUNNING or STOPPED) before deploying.
+for _attempt in range(30):
+    compute_state = _compute_state()
+    if "RUNNING" in compute_state or "STOPPED" in compute_state:
+        print(f"  Compute is {compute_state}")
+        break
+    print(f"  Waiting for compute to settle... (state: {compute_state}, attempt {_attempt + 1})")
+    time.sleep(10)
+else:
+    print("  WARNING: Compute did not settle. Attempting deploy anyway...")
+
+# The repo is already bound at the app level (Step 3), so the documented deploy
+# form is just the branch. Some API versions want the repo echoed inside git_source,
+# so fall back to that if the branch-only form is rejected.
+def _deploy(git_source):
+    return w.apps.deploy_and_wait(
+        app_name=APP_NAME,
+        app_deployment=AppDeployment(git_source=git_source),
+    )
+
+try:
+    deployment = _deploy(GitSource(branch=GIT_BRANCH))
+except Exception as e:
+    print(f"  Branch-only deploy failed ({e}); retrying with explicit git_repository...")
+    deployment = _deploy(GitSource(
+        git_repository=GitRepository(url=GIT_REPO_URL, provider=GIT_PROVIDER),
+        branch=GIT_BRANCH,
+    ))
 
 status = deployment.status
 print(f"  Deploy state: {status.state if status else 'N/A'}")
@@ -778,7 +770,9 @@ print("=" * 60)
 # MAGIC |---|---|
 # MAGIC | App shows "Not Available" | Ensure `app.yaml` has `--port 8000` |
 # MAGIC | "Database not connected" in sidebar | Re-run Steps 4 and 5 above, then redeploy (Step 6) |
-# MAGIC | Blank page / no frontend | `frontend/dist/` is missing — build locally, commit, and pull the Git folder |
+# MAGIC | Blank page / no frontend | `frontend/dist/` is missing on the deployed branch — build locally, commit, and push to `GIT_BRANCH`, then redeploy |
+# MAGIC | "Git repository is required" on update/deploy | The app has no Git repo bound — re-run Step 3 (it attaches `GIT_REPO_URL` to the existing app) |
+# MAGIC | "compute is in ACTIVE state" when starting | Compute is mid-transition; wait for it to reach RUNNING/STOPPED (Step 6 now waits automatically) |
 # MAGIC | Deploy fails with package errors | Check `requirements.txt` has clean `package>=version` lines |
 # MAGIC | Genie/SQL calls 403 for a user | They haven't consented to the OBO scopes — have them reload the app and approve, or re-run Step 3c |
 # MAGIC | "Save to dashboard" / charts fail | Confirm the SP can reach a running SQL warehouse (Step 3) and `sql.dashboards` is in the OBO scopes (Step 3c) |

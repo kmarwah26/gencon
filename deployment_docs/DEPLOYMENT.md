@@ -292,6 +292,26 @@ databricks apps deploy genco \
   -p my-profile
 ```
 
+> **Git-only workspaces:** if your workspace admin has enabled *"only allow app
+> deployments from Git,"* the `--source-code-path` (snapshot) form above is rejected
+> with `Apps in this workspace can only be deployed from Git`. In that case skip the
+> `databricks sync` step entirely and deploy straight from the repo — bind the repo at
+> app-creation time and deploy a branch:
+>
+> ```bash
+> databricks apps create genco \
+>   --json '{"git_repository": {"url": "https://github.com/kmarwah26/gencon.git", "provider": "gitHub"}}' \
+>   -p my-profile
+>
+> databricks apps deploy genco \
+>   --json '{"git_source": {"branch": "main"}}' \
+>   -p my-profile
+> ```
+>
+> The `deploy_genie_force.py` notebook does all of this for you (see
+> `DEPLOYMENT_WORKSPACE.md`). Public repos need no credentials; private repos require a
+> Git credential on the app's service principal.
+
 The deployment takes ~30-60 seconds. Wait for `"state": "SUCCEEDED"` in the output.
 
 ---

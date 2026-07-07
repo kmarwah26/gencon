@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Request
-from server.config import get_workspace_client
+from databricks.sdk.errors import PermissionDenied, Unauthenticated
+from server.config import get_workspace_client, OBO_REAUTH_MESSAGE
 
 router = APIRouter(tags=["warehouses"])
 
@@ -17,6 +18,8 @@ async def list_warehouses(request: Request):
                 "cluster_size": wh.cluster_size or "",
             })
         return {"warehouses": warehouses}
+    except (PermissionDenied, Unauthenticated):
+        raise HTTPException(status_code=403, detail=OBO_REAUTH_MESSAGE)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

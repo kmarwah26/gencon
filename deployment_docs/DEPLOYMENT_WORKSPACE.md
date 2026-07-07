@@ -2,6 +2,12 @@
 
 Deploy Genie-Force entirely from within your Databricks workspace — no local tools required. All you need is a browser and a Git repo.
 
+> **Recommended:** run the `deployment_docs/deploy_genie_force.py` notebook. It deploys the
+> app **directly from the Git repo** (no Workspace Git folder / Repos clone needed) and works
+> in workspaces where the admin policy is *"only allow app deployments from Git."* Set
+> `GIT_REPO_URL` / `GIT_BRANCH` at the top of the notebook. The manual UI steps below are
+> kept for reference, but the notebook is the fastest and most reliable path.
+
 ---
 
 ## Prerequisites
@@ -9,12 +15,17 @@ Deploy Genie-Force entirely from within your Databricks workspace — no local t
 - A Databricks workspace with **serverless compute** enabled
 - The Genie-Force source code in a Git repository (GitHub, GitLab, Azure DevOps, etc.)
 - The `frontend/dist/` directory **must be committed** to the repo (this is the pre-built frontend)
+- For a **private** repo, the app's service principal needs a Git credential configured for your provider (public repos need nothing)
 
 > **Important:** Before pushing to Git, build the frontend locally once (`cd frontend && npm install && npm run build`) and commit the `frontend/dist/` folder. This is required because the Databricks workspace does not have Node.js to build the frontend at deploy time.
 
 ---
 
-## Step 1: Add a Git Folder in the Workspace
+## Step 1: (Optional) Add a Git Folder in the Workspace
+
+> **You can skip this step.** The app deploys directly from the Git repo (Step 7), so a
+> Workspace Git folder is only needed if you want to *run the `deploy_genie_force.py`
+> notebook from inside the repo* or browse the source in the workspace UI.
 
 1. In your Databricks workspace, go to **Workspace** in the left sidebar
 2. Navigate to your user folder: `/Users/<your-email>/`
@@ -103,7 +114,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL PRIVILEGES ON TABLES TO "<SP
 
 1. Go to **Compute** > **Apps** > **genco**
 2. Click **Deploy**
-3. Set **Source code path** to: `/Workspace/Users/<your-email>/genco`
+3. Choose the **Git** source and select branch `main` (the repo was bound to the app when it was created). If your workspace still allows it, you may instead set **Source code path** to `/Workspace/Users/<your-email>/genco` — but Git-only workspaces will reject that.
 4. Click **Deploy**
 5. Wait for the status to show **Running** (~30-60 seconds)
 
@@ -123,12 +134,11 @@ https://genco-<workspace-id>.aws.databricksapps.com
 
 When you push new code to your Git repo:
 
-1. Go to **Workspace** > your Git folder
-2. Click **Pull** to sync the latest changes from the remote
-3. Go to **Compute** > **Apps** > **genco**
-4. Click **Deploy** again with the same source code path
+1. Push your changes to the deployed branch (`main`) on the remote
+2. Go to **Compute** > **Apps** > **genco**
+3. Click **Deploy** again (Git source, branch `main`) — it pulls the latest commit from the remote
 
-> **Remember:** If frontend code changed, the `frontend/dist/` folder must be rebuilt and committed to Git before pulling.
+> **Remember:** If frontend code changed, the `frontend/dist/` folder must be rebuilt (`cd frontend && npm run build`) and committed/pushed **before** you redeploy — the workspace does not build it for you.
 
 ---
 
@@ -166,8 +176,10 @@ for i in range(20):
 # Cell 3: Create database
 run('databricks psql genco-cache -- -c "CREATE DATABASE genco;"')
 
-# Cell 4: Create app
-run('databricks apps create genco --description "Genie-Force - AI/BI Genie Room Manager"')
+# Cell 4: Create app (bound to the Git repo so it deploys from Git)
+run('''databricks apps create genco \
+  --description "Genie-Force - AI/BI Genie Room Manager" \
+  --json '{"git_repository": {"url": "https://github.com/kmarwah26/gencon.git", "provider": "gitHub"}}' ''')
 
 # Cell 5: Get service principal ID and grant access
 app_info = json.loads(run("databricks apps get genco --output json"))
@@ -193,10 +205,8 @@ run('''databricks apps update genco --json '{
   }]
 }' ''')
 
-# Cell 7: Deploy
-import os
-username = json.loads(run("databricks current-user me --output json"))["userName"]
-run(f"databricks apps deploy genco --source-code-path /Workspace/Users/{username}/genco")
+# Cell 7: Deploy from Git (branch main) — no Workspace snapshot needed
+run('''databricks apps deploy genco --json '{"git_source": {"branch": "main"}}' ''')
 
 # Cell 8: Get app URL
 app = json.loads(run("databricks apps get genco --output json"))
@@ -232,4 +242,4 @@ print(f"Status: {app['app_status']['state']}")
 
 1. **Delete the app:** Compute > Apps > genco > Delete
 2. **Delete Lakebase:** Compute > Lakebase > genco-cache > Delete
-3. **Remove Git folder:** Workspace > right-click genco > Delete
+3. **Remove Git folder** (if you created one in Step 1): Workspace > right-click genco > Delete
