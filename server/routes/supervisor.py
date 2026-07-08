@@ -13,7 +13,7 @@ import json
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from server.config import get_workspace_host, get_auth_headers, get_workspace_client
+from server.config import get_workspace_host, get_auth_headers
 from server.db import db
 from server.routes.filters import _current_user_email
 
@@ -77,19 +77,27 @@ async def list_supervisor_endpoints(request: Request):
 
     Databricks doesn't expose a reliable "this endpoint is a supervisor" marker on the
     serving-endpoints side, so we return the queryable endpoints and let the user choose
-    the one their admin created. Runs under the user's identity so they only see
-    endpoints they can access.
+    the one their admin created. Uses a raw REST call (like server/routes/genie.py) under
+    the user's OBO token rather than the SDK — the pinned SDK's dataclass can fail to
+    parse newer serving-endpoint response fields, and REST just returns the JSON.
     """
+    host = get_workspace_host().rstrip("/")
+    headers = get_auth_headers(request)
     try:
-        w = get_workspace_client(request)
-        endpoints = []
-        for e in w.serving_endpoints.list():
-            endpoints.append({
-                "name": e.name,
-                "state": str(e.state.ready) if e.state and e.state.ready else "",
-            })
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(f"{host}/api/2.0/serving-endpoints", headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+        endpoints = [
+            {"name": e.get("name", ""), "state": (e.get("state") or {}).get("ready", "")}
+            for e in data.get("endpoints", [])
+            if e.get("name")
+        ]
         endpoints.sort(key=lambda x: x["name"].lower())
         return {"endpoints": endpoints}
+    except httpx.HTTPStatusError as e:
+        detail = e.response.text if e.response else str(e)
+        raise HTTPException(status_code=e.response.status_code, detail=detail)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
