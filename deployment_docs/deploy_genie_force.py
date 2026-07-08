@@ -75,6 +75,7 @@ USER_API_SCOPES = [
     "dashboards.genie",  # Genie rooms: list/create/edit/delete, conversations, query results
     "sql.dashboards",    # Lakeview dashboards: create/publish/share/embed
     "files",             # Workspace files browser (list/export notebooks & SQL files)
+    "serving.serving-endpoints",  # Ask Everything: list + query the Agent Bricks supervisor endpoint
 ]
 
 # COMMAND ----------
