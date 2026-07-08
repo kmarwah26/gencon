@@ -10,6 +10,8 @@ import {
   Settings,
   ExternalLink,
   RefreshCw,
+  Sparkles,
+  Info,
 } from 'lucide-react'
 import { api } from '../api'
 
@@ -32,6 +34,11 @@ export default function SupervisorChat() {
   const [instructions, setInstructions] = useState('')
   const [savingConfig, setSavingConfig] = useState(false)
   const [configSaved, setConfigSaved] = useState(false)
+  const [details, setDetails] = useState<{
+    is_supervisor: boolean; display_name: string; description: string;
+    instructions: string; genie_spaces: { id: string; title: string; description: string }[]
+  } | null>(null)
+  const [detailsLoading, setDetailsLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -69,6 +76,19 @@ export default function SupervisorChat() {
       setSavingConfig(false)
     }
   }
+
+  // When an endpoint is chosen, load its supervisor details (subagents + instructions).
+  useEffect(() => {
+    if (!selectedEndpoint) { setDetails(null); return }
+    let cancelled = false
+    setDetailsLoading(true)
+    setDetails(null)
+    api.getSupervisorDetails(selectedEndpoint)
+      .then((d) => { if (!cancelled) setDetails(d) })
+      .catch(() => { if (!cancelled) setDetails(null) })
+      .finally(() => { if (!cancelled) setDetailsLoading(false) })
+    return () => { cancelled = true }
+  }, [selectedEndpoint])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -192,6 +212,62 @@ export default function SupervisorChat() {
                 question across its Genie subagents using your own data access.
               </p>
             </div>
+
+            {/* Supervisor details: Genie subagents + instructions (read-only) */}
+            {selectedEndpoint && (
+              <div className="p-3 border-t border-[var(--border)] overflow-y-auto">
+                {detailsLoading ? (
+                  <div className="flex items-center gap-2 text-[11px] text-[var(--text-secondary)] py-1">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading supervisor…
+                  </div>
+                ) : details && details.is_supervisor ? (
+                  <>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Sparkles className="w-3.5 h-3.5 text-[#6366F1]" />
+                      <span className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                        Genies in this supervisor ({details.genie_spaces.length})
+                      </span>
+                    </div>
+                    {details.genie_spaces.length === 0 ? (
+                      <p className="text-[11px] text-[var(--text-secondary)]">No Genie subagents found.</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {details.genie_spaces.map((g) => (
+                          <div key={g.id} className="flex items-start gap-2 px-2 py-1.5 rounded-lg bg-[var(--bg-tertiary)]">
+                            <Network className="w-3.5 h-3.5 text-[#6366F1] shrink-0 mt-0.5" />
+                            <div className="min-w-0">
+                              <p className="text-[11px] font-medium text-[var(--text-primary)] truncate">{g.title}</p>
+                              {g.description && (
+                                <p className="text-[10px] text-[var(--text-secondary)] leading-snug line-clamp-2">{g.description}</p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {details.instructions && (
+                      <div className="mt-3">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <Info className="w-3.5 h-3.5 text-[#6366F1]" />
+                          <span className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                            Supervisor instructions
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-[var(--text-secondary)] leading-snug whitespace-pre-wrap bg-[var(--bg-tertiary)] rounded-lg px-2 py-1.5">
+                          {details.instructions}
+                        </p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-[10px] text-[var(--text-secondary)] leading-snug">
+                    This endpoint isn't a recognized Agent Bricks supervisor, or its details aren't
+                    available. You can still query it below.
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Instructions + save setup */}
             <div className="p-3 border-t border-[var(--border)]">

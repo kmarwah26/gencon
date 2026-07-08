@@ -333,6 +333,14 @@ export const api = {
 
   listSupervisorEndpoints: () =>
     request<{ endpoints: { name: string; state: string }[] }>('/supervisor/endpoints'),
+  getSupervisorDetails: (endpointName: string) =>
+    request<{
+      is_supervisor: boolean;
+      display_name: string;
+      description: string;
+      instructions: string;
+      genie_spaces: { id: string; title: string; description: string }[];
+    }>(`/supervisor/endpoints/${encodeURIComponent(endpointName)}/details`),
   getSupervisorConfig: () =>
     request<{ endpoint_name: string | null; instructions: string; db_available: boolean }>('/supervisor/config'),
   saveSupervisorConfig: (data: { endpoint_name: string | null; instructions: string }) =>
