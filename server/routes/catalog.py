@@ -1,15 +1,31 @@
+import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
-from server.config import get_workspace_client
+from server.config import get_workspace_host, get_auth_headers
 from server.db import db
 
 router = APIRouter(tags=["catalog"])
+
+
+async def _uc_get(request: Request, path: str, params: dict) -> dict:
+    """Call the Unity Catalog REST API directly under the user's OBO token.
+
+    We use REST instead of the SDK for catalog/schema/table listing because the pinned
+    databricks-sdk (0.67.0) can fail to parse responses when include_browse surfaces
+    browse-only objects with sparse fields — that manifested as 500s on /schemas. REST
+    just returns the JSON. Mirrors the httpx pattern in server/routes/genie.py.
+    """
+    host = get_workspace_host().rstrip("/")
+    headers = get_auth_headers(request)
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.get(f"{host}{path}", headers=headers, params=params)
+        resp.raise_for_status()
+        return resp.json()
 
 
 @router.get("/catalog-search")
 async def search_catalog(request: Request, q: str = Query(..., min_length=1)):
     """Search by three-level namespace or plain table name."""
     try:
-        w = get_workspace_client(request)
         parts = [p.strip() for p in q.split(".")]
         results = []
 
@@ -43,26 +59,29 @@ async def search_catalog(request: Request, q: str = Query(..., min_length=1)):
                 pass
 
             # Fallback: filter catalogs by name
-            for c in w.catalogs.list():
-                if prefix in c.name.lower():
-                    results.append({
-                        "type": "catalog",
-                        "name": c.name,
-                        "full_name": c.name,
-                    })
-                if len(results) >= 50:
-                    break
+            try:
+                data = await _uc_get(request, "/api/2.1/unity-catalog/catalogs",
+                                     {"include_browse": "true", "max_results": 500})
+                for c in data.get("catalogs", []):
+                    if c.get("name") and prefix in c["name"].lower():
+                        results.append({"type": "catalog", "name": c["name"], "full_name": c["name"]})
+                    if len(results) >= 50:
+                        break
+            except Exception:
+                pass
 
         elif len(parts) == 2:
             # catalog.schema — list matching schemas
             catalog, schema_prefix = parts[0], parts[1].lower()
             try:
-                for s in w.schemas.list(catalog_name=catalog, include_browse=True):
-                    if schema_prefix in s.name.lower():
+                data = await _uc_get(request, "/api/2.1/unity-catalog/schemas",
+                                     {"catalog_name": catalog, "include_browse": "true"})
+                for s in data.get("schemas", []):
+                    if s.get("name") and schema_prefix in s["name"].lower():
                         results.append({
                             "type": "schema",
-                            "name": s.name,
-                            "full_name": s.full_name,
+                            "name": s["name"],
+                            "full_name": s.get("full_name", ""),
                             "catalog": catalog,
                         })
                     if len(results) >= 50:
@@ -74,25 +93,25 @@ async def search_catalog(request: Request, q: str = Query(..., min_length=1)):
             # catalog.schema.table — list matching tables
             catalog, schema, table_prefix = parts[0], parts[1], ".".join(parts[2:]).lower()
             try:
-                for t in w.tables.list(
-                    catalog_name=catalog, schema_name=schema, include_browse=True
-                ):
-                    if table_prefix in t.name.lower():
+                data = await _uc_get(request, "/api/2.1/unity-catalog/tables",
+                                     {"catalog_name": catalog, "schema_name": schema, "include_browse": "true"})
+                for t in data.get("tables", []):
+                    if t.get("name") and table_prefix in t["name"].lower():
                         results.append({
                             "type": "table",
-                            "name": t.name,
-                            "full_name": t.full_name,
+                            "name": t["name"],
+                            "full_name": t.get("full_name", ""),
                             "catalog": catalog,
                             "schema": schema,
-                            "table_type": str(t.table_type) if t.table_type else "",
-                            "comment": t.comment or "",
+                            "table_type": t.get("table_type", ""),
+                            "comment": t.get("comment", ""),
                             "columns": [
                                 {
-                                    "name": col.name,
-                                    "type": str(col.type_text) if col.type_text else "",
-                                    "comment": col.comment or "",
+                                    "name": col.get("name", ""),
+                                    "type": col.get("type_text", ""),
+                                    "comment": col.get("comment", ""),
                                 }
-                                for col in (t.columns or [])
+                                for col in (t.get("columns") or [])
                             ],
                         })
                     if len(results) >= 50:
@@ -108,17 +127,18 @@ async def search_catalog(request: Request, q: str = Query(..., min_length=1)):
 @router.get("/catalogs")
 async def list_catalogs(request: Request):
     try:
-        w = get_workspace_client(request)
-        catalogs = []
-        for c in w.catalogs.list(max_results=500, include_browse=True):
-            catalogs.append({
-                "name": c.name,
-                "comment": c.comment or "",
-                "owner": c.owner or "",
-            })
-        # Sort alphabetically for consistent display
+        data = await _uc_get(
+            request, "/api/2.1/unity-catalog/catalogs",
+            {"include_browse": "true", "max_results": 500},
+        )
+        catalogs = [
+            {"name": c.get("name", ""), "comment": c.get("comment", ""), "owner": c.get("owner", "")}
+            for c in data.get("catalogs", []) if c.get("name")
+        ]
         catalogs.sort(key=lambda x: x["name"].lower())
         return {"catalogs": catalogs}
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -126,17 +146,19 @@ async def list_catalogs(request: Request):
 @router.get("/catalogs/{catalog_name}/schemas")
 async def list_schemas(catalog_name: str, request: Request):
     try:
-        w = get_workspace_client(request)
-        schemas = []
-        # include_browse=True surfaces schemas the user has only browse/metadata access
-        # to (not just ones they can fully query) — matches Catalog Explorer behavior.
-        for s in w.schemas.list(catalog_name=catalog_name, include_browse=True):
-            schemas.append({
-                "name": s.name,
-                "full_name": s.full_name,
-                "comment": s.comment or "",
-            })
+        # include_browse surfaces schemas the user has only browse/metadata access to
+        # (not just ones they can fully query) — matches Catalog Explorer.
+        data = await _uc_get(
+            request, "/api/2.1/unity-catalog/schemas",
+            {"catalog_name": catalog_name, "include_browse": "true"},
+        )
+        schemas = [
+            {"name": s.get("name", ""), "full_name": s.get("full_name", ""), "comment": s.get("comment", "")}
+            for s in data.get("schemas", []) if s.get("name")
+        ]
         return {"schemas": schemas}
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -144,28 +166,33 @@ async def list_schemas(catalog_name: str, request: Request):
 @router.get("/catalogs/{catalog_name}/schemas/{schema_name}/tables")
 async def list_tables(catalog_name: str, schema_name: str, request: Request):
     try:
-        w = get_workspace_client(request)
+        # include_browse is essential under OBO: without it, tables the user has only
+        # browse/metadata access to (no SELECT grant yet) are silently omitted, so a
+        # schema appears to have no tables. Matches Catalog Explorer.
+        data = await _uc_get(
+            request, "/api/2.1/unity-catalog/tables",
+            {"catalog_name": catalog_name, "schema_name": schema_name, "include_browse": "true"},
+        )
         tables = []
-        # include_browse=True is essential under OBO: without it, tables the user has
-        # only browse/metadata access to (no SELECT grant yet) are silently omitted,
-        # so a schema appears to have no tables. This matches Catalog Explorer.
-        for t in w.tables.list(
-            catalog_name=catalog_name, schema_name=schema_name, include_browse=True
-        ):
+        for t in data.get("tables", []):
+            if not t.get("name"):
+                continue
             tables.append({
-                "name": t.name,
-                "full_name": t.full_name,
-                "table_type": str(t.table_type) if t.table_type else "",
-                "comment": t.comment or "",
+                "name": t.get("name", ""),
+                "full_name": t.get("full_name", ""),
+                "table_type": t.get("table_type", ""),
+                "comment": t.get("comment", ""),
                 "columns": [
                     {
-                        "name": col.name,
-                        "type": str(col.type_text) if col.type_text else "",
-                        "comment": col.comment or "",
+                        "name": col.get("name", ""),
+                        "type": col.get("type_text", ""),
+                        "comment": col.get("comment", ""),
                     }
-                    for col in (t.columns or [])
+                    for col in (t.get("columns") or [])
                 ],
             })
         return {"tables": tables}
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
