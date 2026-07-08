@@ -133,7 +133,13 @@ export default function CreateRoom() {
       setExpandedCatalogs((s) => new Set(s).add(name))
       if (!schemas[name]) {
         setLoadingNodes((s) => new Set(s).add(name))
-        try { const r = await api.listSchemas(name); setSchemas((s) => ({ ...s, [name]: r.schemas })) } catch {}
+        try {
+          const r = await api.listSchemas(name)
+          setSchemas((s) => ({ ...s, [name]: r.schemas }))
+          setNodeErrors((e) => { const n = { ...e }; delete n[name]; return n })
+        } catch (err: any) {
+          setNodeErrors((e) => ({ ...e, [name]: err.message || 'Failed to load schemas' }))
+        }
         setLoadingNodes((s) => { const n = new Set(s); n.delete(name); return n })
       }
     }
@@ -1755,6 +1761,13 @@ function CatalogPicker({
                     </div>
                   )
                 })}
+                {/* Surface schema load failures / empty catalogs instead of a blank body */}
+                {expandedCatalogs.has(cat.name) && !loadingNodes.has(cat.name) && nodeErrors[cat.name] && (
+                  <p className="ml-6 px-2 py-1.5 text-[11px] text-red-500">{nodeErrors[cat.name]}</p>
+                )}
+                {expandedCatalogs.has(cat.name) && !loadingNodes.has(cat.name) && !nodeErrors[cat.name] && schemas[cat.name]?.length === 0 && (
+                  <p className="ml-6 px-2 py-1.5 text-[11px] text-[var(--text-secondary)]">No schemas you can access in this catalog.</p>
+                )}
               </div>
             ))}
             {visibleCount < filteredCatalogs.length && (
