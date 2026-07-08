@@ -130,15 +130,15 @@ async def get_supervisor_details(endpoint_name: str, request: Request):
             # 1. Resolve the supervisor id from the serving endpoint metadata.
             ep = await client.get(f"{host}/api/2.0/serving-endpoints/{endpoint_name}", headers=headers)
             if ep.status_code != 200:
-                return empty
+                return {**empty, "_debug": {"step": "endpoint", "status": ep.status_code, "body": ep.text[:150]}}
             sid = (ep.json().get("tile_endpoint_metadata") or {}).get("tile_id") or ""
             if not sid:
-                return empty  # not a supervisor-backed endpoint
+                return {**empty, "_debug": {"step": "tile_id", "keys": list(ep.json().keys()), "tem": ep.json().get("tile_endpoint_metadata")}}
 
             # 2. GET the supervisor definition by id (honors CAN_QUERY).
             r = await client.get(f"{host}/api/2.1/supervisor-agents/{sid}", headers=headers)
-            if r.status_code in (403, 404):
-                return empty
+            if r.status_code != 200:
+                return {**empty, "_debug": {"step": "get_agent", "sid": sid, "status": r.status_code, "body": r.text[:200]}}
             r.raise_for_status()
             agent = r.json()
             result = {
