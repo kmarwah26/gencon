@@ -135,8 +135,7 @@ async def get_supervisor_details(endpoint_name: str, request: Request):
                 params = {"page_token": page_token} if page_token else {}
                 r = await client.get(f"{host}/api/2.1/supervisor-agents", headers=sp_headers, params=params)
                 if r.status_code in (403, 404):
-                    # TEMP DEBUG: surface why the SP read failed
-                    return {**empty, "_debug": {"status": r.status_code, "body": r.text[:300]}}
+                    return empty  # preview API not enabled / SP lacks access
                 r.raise_for_status()
                 data = r.json()
                 for a in data.get("supervisor_agents", []):
@@ -147,17 +146,7 @@ async def get_supervisor_details(endpoint_name: str, request: Request):
                 if agent or not page_token:
                     break
             if not agent:
-                # TEMP DEBUG: compare SP vs OBO list results
-                dbg = {}
-                for label, h in (("sp", sp_headers), ("obo", obo_headers)):
-                    try:
-                        rr = await client.get(f"{host}/api/2.1/supervisor-agents", headers=h)
-                        dbg[label] = {"status": rr.status_code,
-                                      "count": len(rr.json().get("supervisor_agents", [])) if rr.status_code == 200 else None,
-                                      "body": rr.text[:150] if rr.status_code != 200 else None}
-                    except Exception as ex:
-                        dbg[label] = {"exc": str(ex)}
-                return {**empty, "_debug": dbg}
+                return empty
 
             sid = agent.get("supervisor_agent_id") or ""
             result = {
