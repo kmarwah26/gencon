@@ -706,10 +706,14 @@ from databricks.sdk.service.apps import AppDeployment, GitSource, GitRepository
 # this is what works in workspaces with "only allow app deployments from Git".
 print(f"Deploying from Git: {GIT_REPO_URL} @ {GIT_BRANCH}")
 
-# Ensure the app's compute is in a deployable state. Deploy needs the compute
-# STOPPED or RUNNING; while it's transitioning (ACTIVE/STARTING/STOPPING) a
-# start() call is rejected with "compute is in ACTIVE state". So we only start
-# when the compute is actually STOPPED, and otherwise wait for it to settle.
+# Ensure the app's compute is in a deployable state. The compute_status states are
+# ACTIVE / STARTING / STOPPED / STOPPING / UPDATING / DELETING / ERROR (there is no
+# "RUNNING" — that's app_status, not compute_status). Deploy is fine when compute is
+# ACTIVE (running) or STOPPED; while it's transitioning (STARTING/STOPPING/UPDATING) a
+# start() call is rejected with "compute is in ACTIVE state", so we only start from a
+# STOPPED state and otherwise wait for the transition to finish.
+SETTLED = ("ACTIVE", "STOPPED", "ERROR")
+
 def _compute_state():
     a = w.apps.get(name=APP_NAME)
     return str(a.compute_status.state) if a.compute_status else ""
@@ -724,10 +728,10 @@ if "STOPPED" in compute_state:
     except Exception as e:
         print(f"  Note: {e}")
 
-# Wait for compute to settle into a terminal state (RUNNING or STOPPED) before deploying.
+# Wait for compute to settle into a deployable state (ACTIVE / STOPPED) before deploying.
 for _attempt in range(30):
     compute_state = _compute_state()
-    if "RUNNING" in compute_state or "STOPPED" in compute_state:
+    if any(s in compute_state for s in SETTLED):
         print(f"  Compute is {compute_state}")
         break
     print(f"  Waiting for compute to settle... (state: {compute_state}, attempt {_attempt + 1})")
@@ -786,7 +790,7 @@ print("=" * 60)
 # MAGIC | "Database not connected" in sidebar | Re-run Steps 4 and 5 above, then redeploy (Step 6) |
 # MAGIC | Blank page / no frontend | `frontend/dist/` is missing on the deployed branch — build locally, commit, and push to `GIT_BRANCH`, then redeploy |
 # MAGIC | "Git repository is required" on update/deploy | The app has no Git repo bound — re-run Step 3 (it attaches `GIT_REPO_URL` to the existing app) |
-# MAGIC | "compute is in ACTIVE state" when starting | Compute is mid-transition; wait for it to reach RUNNING/STOPPED (Step 6 now waits automatically) |
+# MAGIC | "compute is in ACTIVE state" when starting | Compute is mid-transition; wait for it to reach ACTIVE/STOPPED (Step 6 now waits automatically) |
 # MAGIC | Deploy fails with package errors | Check `requirements.txt` has clean `package>=version` lines |
 # MAGIC | Genie/SQL calls 403 for a user | They haven't consented to the OBO scopes — have them reload the app and approve, or re-run Step 3c |
 # MAGIC | "Save to dashboard" / charts fail | Confirm the SP can reach a running SQL warehouse (Step 3) and `sql.dashboards` is in the OBO scopes (Step 3c) |
