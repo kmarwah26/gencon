@@ -57,7 +57,7 @@ async def search_catalog(request: Request, q: str = Query(..., min_length=1)):
             # catalog.schema — list matching schemas
             catalog, schema_prefix = parts[0], parts[1].lower()
             try:
-                for s in w.schemas.list(catalog_name=catalog):
+                for s in w.schemas.list(catalog_name=catalog, include_browse=True):
                     if schema_prefix in s.name.lower():
                         results.append({
                             "type": "schema",
@@ -75,7 +75,7 @@ async def search_catalog(request: Request, q: str = Query(..., min_length=1)):
             catalog, schema, table_prefix = parts[0], parts[1], ".".join(parts[2:]).lower()
             try:
                 for t in w.tables.list(
-                    catalog_name=catalog, schema_name=schema
+                    catalog_name=catalog, schema_name=schema, include_browse=True
                 ):
                     if table_prefix in t.name.lower():
                         results.append({
@@ -110,7 +110,7 @@ async def list_catalogs(request: Request):
     try:
         w = get_workspace_client(request)
         catalogs = []
-        for c in w.catalogs.list(max_results=500):
+        for c in w.catalogs.list(max_results=500, include_browse=True):
             catalogs.append({
                 "name": c.name,
                 "comment": c.comment or "",
@@ -128,7 +128,9 @@ async def list_schemas(catalog_name: str, request: Request):
     try:
         w = get_workspace_client(request)
         schemas = []
-        for s in w.schemas.list(catalog_name=catalog_name):
+        # include_browse=True surfaces schemas the user has only browse/metadata access
+        # to (not just ones they can fully query) — matches Catalog Explorer behavior.
+        for s in w.schemas.list(catalog_name=catalog_name, include_browse=True):
             schemas.append({
                 "name": s.name,
                 "full_name": s.full_name,
@@ -144,8 +146,11 @@ async def list_tables(catalog_name: str, schema_name: str, request: Request):
     try:
         w = get_workspace_client(request)
         tables = []
+        # include_browse=True is essential under OBO: without it, tables the user has
+        # only browse/metadata access to (no SELECT grant yet) are silently omitted,
+        # so a schema appears to have no tables. This matches Catalog Explorer.
         for t in w.tables.list(
-            catalog_name=catalog_name, schema_name=schema_name
+            catalog_name=catalog_name, schema_name=schema_name, include_browse=True
         ):
             tables.append({
                 "name": t.name,
