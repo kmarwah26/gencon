@@ -117,7 +117,13 @@ async def get_supervisor_details(endpoint_name: str, request: Request):
     so the UI can simply show nothing extra.
     """
     host = get_workspace_host().rstrip("/")
-    headers = get_auth_headers(request)
+    # The supervisor-agents (Agent Bricks) API has no user-authorization OBO scope in the
+    # app's scope set, so the forwarded user token 403s on it. Reading the MAS *definition*
+    # (name, instructions, subagent list) is non-sensitive workspace metadata, so we read
+    # it with the service principal. The actual query (/invocations) and the per-user Genie
+    # title lookup below still run under the user's OBO token.
+    sp_headers = get_auth_headers()          # service principal
+    obo_headers = get_auth_headers(request)  # logged-in user
     empty = {"is_supervisor": False, "display_name": "", "description": "",
              "instructions": "", "genie_spaces": []}
     try:
@@ -127,9 +133,9 @@ async def get_supervisor_details(endpoint_name: str, request: Request):
             page_token = None
             for _ in range(20):
                 params = {"page_token": page_token} if page_token else {}
-                r = await client.get(f"{host}/api/2.1/supervisor-agents", headers=headers, params=params)
-                if r.status_code == 404:
-                    return empty  # preview API not enabled in this workspace
+                r = await client.get(f"{host}/api/2.1/supervisor-agents", headers=sp_headers, params=params)
+                if r.status_code in (403, 404):
+                    return empty  # preview API not enabled / SP lacks access
                 r.raise_for_status()
                 data = r.json()
                 for a in data.get("supervisor_agents", []):
@@ -157,7 +163,7 @@ async def get_supervisor_details(endpoint_name: str, request: Request):
             for _ in range(20):
                 params = {"page_token": page_token} if page_token else {}
                 tr = await client.get(f"{host}/api/2.1/supervisor-agents/{sid}/tools",
-                                      headers=headers, params=params)
+                                      headers=sp_headers, params=params)
                 tr.raise_for_status()
                 tdata = tr.json()
                 tools.extend(tdata.get("tools", []) or [])
@@ -171,13 +177,16 @@ async def get_supervisor_details(endpoint_name: str, request: Request):
                 gs = t.get("genie_space") or {}
                 space_id = gs.get("space_id") or gs.get("id") or ""
                 title = ""
-                # Best-effort: resolve the space's title for a friendlier label.
-                try:
-                    sr = await client.get(f"{host}/api/2.0/genie/spaces/{space_id}", headers=headers)
-                    if sr.status_code == 200:
-                        title = sr.json().get("title", "")
-                except Exception:
-                    pass
+                # Best-effort: resolve the space's title for a friendlier label. Use the
+                # user's OBO token so it respects their Genie visibility; fall back to SP.
+                for h in (obo_headers, sp_headers):
+                    try:
+                        sr = await client.get(f"{host}/api/2.0/genie/spaces/{space_id}", headers=h)
+                        if sr.status_code == 200:
+                            title = sr.json().get("title", "")
+                            break
+                    except Exception:
+                        pass
                 result["genie_spaces"].append({
                     "id": space_id,
                     "title": title or space_id,
