@@ -331,33 +331,20 @@ export const api = {
       body: JSON.stringify({ content }),
     }),
 
+  listSupervisorEndpoints: () =>
+    request<{ endpoints: { name: string; state: string }[] }>('/supervisor/endpoints'),
   getSupervisorConfig: () =>
-    request<{ room_ids: string[]; instructions: string; db_available: boolean }>('/supervisor/config'),
-  saveSupervisorConfig: (data: { room_ids: string[]; instructions: string }) =>
+    request<{ endpoint_name: string | null; instructions: string; db_available: boolean }>('/supervisor/config'),
+  saveSupervisorConfig: (data: { endpoint_name: string | null; instructions: string }) =>
     request<{ saved: boolean }>('/supervisor/config', { method: 'PUT', body: JSON.stringify(data) }),
   supervisorAsk: (data: {
     question: string;
-    room_ids: string[];
-    room_descriptions: { id: string; title: string; description: string }[];
+    endpoint_name?: string | null;
     instructions?: string;
-    conversation_state?: Record<string, string>;
-    recursion_limit?: number;
   }) =>
     request<{
       answer: string;
-      routed_to: {
-        room_id: string;
-        room_title: string;
-        room_description?: string;
-        status: string;
-        text: string;
-        query: string;
-        description: string;
-        query_result: any;
-      }[];
-      routing_reasoning?: string;
-      recursion_limit_used?: number;
-      conversation_state: Record<string, string>;
+      endpoint_name: string;
     }>('/supervisor/ask', { method: 'POST', body: JSON.stringify(data) }),
 
   // Cache endpoints (Lakebase-backed, fast reads)

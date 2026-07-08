@@ -5,26 +5,21 @@ Sample Data Generator — creates realistic industry-specific tables in Unity Ca
 import asyncio
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
+from openai import AsyncOpenAI
 from server.config import get_workspace_host, get_auth_headers
 import httpx
 
-# Lazy-load ChatDatabricks — same MCP-transitive-dep issue as supervisor.py.
-ChatDatabricks = None  # type: ignore
 
+def _llm_client() -> AsyncOpenAI:
+    """LLM client over the workspace's OpenAI-compatible serving endpoints.
 
-def _load_chat_databricks():
-    global ChatDatabricks
-    if ChatDatabricks is not None:
-        return ChatDatabricks
-    try:
-        from databricks_langchain import ChatDatabricks as _Chat  # noqa: WPS433
-    except Exception as e:
-        raise HTTPException(
-            status_code=503,
-            detail=f"LLM stack unavailable due to dependency issue: {e}",
-        )
-    ChatDatabricks = _Chat
-    return _Chat
+    Replaces the old databricks_langchain.ChatDatabricks dependency (which pulled in the
+    fragile langchain/MCP stack); mirrors server/routes/analysis.py._llm_client.
+    """
+    host = get_workspace_host()
+    token = get_auth_headers().get("Authorization", "").replace("Bearer ", "")
+    return AsyncOpenAI(api_key=token, base_url=f"{host}/serving-endpoints")
+
 
 router = APIRouter(tags=["sample-data"])
 
@@ -416,10 +411,14 @@ Rules: Return ONLY raw SQL, no markdown/fences/explanation. Semicolons between s
 
     try:
         # Step 1: LLM generates CREATE TABLE + seed INSERT
-        _Chat = _load_chat_databricks()
-        llm = _Chat(endpoint=LLM_ENDPOINT)
-        response = await asyncio.to_thread(llm.invoke, prompt)
-        sql = response.content.strip()
+        llm = _llm_client()
+        response = await llm.chat.completions.create(
+            model=LLM_ENDPOINT,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=4096,
+            temperature=0.3,
+        )
+        sql = response.choices[0].message.content.strip()
 
         # Clean markdown fences
         if sql.startswith("```"):

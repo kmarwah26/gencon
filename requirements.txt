@@ -7,15 +7,7 @@ python-multipart==0.0.20
 httpx==0.28.1
 openai==2.14.0
 asyncpg==0.30.0
-databricks-langchain==0.14.0
-langgraph==1.2.6
-langgraph-prebuilt==1.1.0
-langgraph-supervisor==0.0.31
-# Pin the langchain-mcp-adapters / mcp pair — they drift apart and break the import
-# chain that `import databricks_langchain` pulls in (multi_server_mcp_client). mcp 1.12.4
-# exports `streamablehttp_client`; adapters >=0.3.0 import `streamable_http_client` (a
-# name absent from mcp 1.12.x), which 503s the supervisor. databricks-langchain 0.14.0
-# requires adapters>=0.1.13, so cap the upper bound below 0.3.0 to stay on the
-# `streamablehttp_client` API that mcp 1.12.x provides.
-mcp>=1.10.0,<2.0.0
-langchain-mcp-adapters>=0.1.13,<0.3.0
+# NOTE: "Ask Everything" now queries a Databricks Agent Bricks Multi-Agent Supervisor
+# serving endpoint over REST (see server/routes/supervisor.py). The old in-app langgraph
+# + databricks-langchain + mcp stack was removed — it caused MCP/langchain version-skew
+# 503s on redeploys, and the managed supervisor handles routing natively.

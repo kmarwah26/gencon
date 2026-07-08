@@ -216,12 +216,34 @@ print(f"Status: {app['app_status']['state']}")
 
 ---
 
+## Enabling "Ask Everything" (Agent Bricks Multi-Agent Supervisor)
+
+The **Ask Everything** screen no longer runs an in-app supervisor. Instead it queries a
+**Databricks Agent Bricks Multi-Agent Supervisor** you create in the workspace, so routing
+and per-user data access are handled natively. This is optional — the rest of the app works
+without it.
+
+1. Enable the **Agent Bricks** preview (Beta): **Settings → Previews** at the account level.
+2. In the workspace, open **Agent Bricks → Multi-Agent Supervisor** and create one. Add your
+   Genie spaces (rooms) as subagents. It deploys as a **serving endpoint**.
+3. Grant the users who will use "Ask Everything" **CAN QUERY** on that serving endpoint, and make
+   sure they have access to each Genie space + its underlying Unity Catalog tables (the supervisor
+   enforces the caller's own permissions).
+4. In the app, open **Ask Everything**, pick the supervisor's serving endpoint from the panel, and
+   **Save setup**. Ask away.
+
+> No app redeploy or config change is needed to point at a supervisor — users select the endpoint
+> in the UI. The app lists serving endpoints under each user's own identity.
+
+---
+
 ## Verifying the Deployment
 
 | Check | How |
 |---|---|
 | App is running | **Compute** > **Apps** > **genco** shows **Running** |
 | Lakebase connected | Open the app, go to chat, sidebar shows "No saved questions yet" (not "Database not connected") |
+| Ask Everything | Open **Ask Everything** — the panel lists serving endpoints; selecting the supervisor and asking returns an answer |
 | Logs | Append `/logz` to the app URL |
 
 ---
@@ -235,6 +257,8 @@ print(f"Status: {app['app_status']['state']}")
 | Blank page / no frontend | `frontend/dist/` is missing from the Git repo — build and commit it |
 | Deploy fails with package errors | Check `requirements.txt` has clean `package>=version` format |
 | "role does not exist" | The SP needs to connect once first, or manually create the role in psql |
+| Ask Everything: no endpoints listed | The user needs **CAN QUERY** on the supervisor's serving endpoint; confirm an Agent Bricks supervisor exists (Previews enabled) |
+| Ask Everything: permission error on a table | The querying user lacks access to a Genie subagent's underlying UC tables — grant them, or they'll only get answers from data they can see |
 
 ---
 
