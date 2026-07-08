@@ -5,7 +5,7 @@ import {
   ChevronRight, ChevronDown, Database, Layers, Table2, Check,
   AlertTriangle, CheckCircle2, FileText, BarChart3, ArrowRight, ArrowLeft,
   Pencil, Save, Code, Trash2, Wand2, Clock, Hash, MessageSquarePlus, SkipForward,
-  Upload, FolderOpen, Folder, Lock, Users as UsersIcon,
+  Upload, FolderOpen, Folder, Lock, Users as UsersIcon, Play,
 } from 'lucide-react'
 import { api } from '../api'
 import type {
@@ -38,6 +38,7 @@ export default function CreateRoom() {
   const [warehouses, setWarehouses] = useState<WarehouseType[]>([])
   const [warehouseId, setWarehouseId] = useState('')
   const [warehouseError, setWarehouseError] = useState('')
+  const [startingWarehouse, setStartingWarehouse] = useState(false)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
   const navigate = useNavigate()
@@ -108,14 +109,45 @@ export default function CreateRoom() {
     return () => { if (searchTimer.current) clearTimeout(searchTimer.current) }
   }, [pickerSearch])
 
-  useEffect(() => {
-    api.listWarehouses().then((r) => {
+  const loadWarehouses = useCallback(async (autoSelectRunning = false) => {
+    try {
+      const r = await api.listWarehouses()
       setWarehouses(r.warehouses)
       setWarehouseError('')
-      const running = r.warehouses.find((w) => w.state.includes('RUNNING'))
-      if (running) setWarehouseId(running.id)
-    }).catch((e: any) => setWarehouseError(e.message || 'Failed to load SQL warehouses'))
+      if (autoSelectRunning) {
+        const running = r.warehouses.find((w) => w.state.includes('RUNNING'))
+        if (running) setWarehouseId(running.id)
+      }
+      return r.warehouses
+    } catch (e: any) {
+      setWarehouseError(e.message || 'Failed to load SQL warehouses')
+      return []
+    }
   }, [])
+
+  useEffect(() => { loadWarehouses(true) }, [loadWarehouses])
+
+  // Start the selected warehouse and poll until it reports RUNNING, so the dropdown
+  // label reflects the new state without the user leaving the page.
+  const startSelectedWarehouse = async () => {
+    if (!warehouseId || startingWarehouse) return
+    setStartingWarehouse(true)
+    setWarehouseError('')
+    try {
+      await api.startWarehouse(warehouseId)
+      for (let i = 0; i < 40; i++) {
+        await new Promise((res) => setTimeout(res, 3000))
+        const list = await loadWarehouses()
+        const wh = list.find((w) => w.id === warehouseId)
+        if (wh && wh.state.includes('RUNNING')) break
+        if (wh && wh.state.includes('STOPPED')) { setWarehouseError('Warehouse stopped before it finished starting.'); break }
+      }
+    } catch (e: any) {
+      setWarehouseError(e.message || 'Failed to start warehouse')
+    } finally {
+      setStartingWarehouse(false)
+    }
+  }
 
   const openPicker = useCallback(() => {
     setPickerOpen(true)
@@ -397,11 +429,41 @@ export default function CreateRoom() {
           </div>
           <div>
             <label className="flex items-center gap-2 text-sm font-medium mb-2"><Warehouse className="w-4 h-4 text-[var(--text-secondary)]" /> SQL Warehouse</label>
-            <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:border-[#6366F1] transition-colors">
-              <option value="">{warehouses.length === 0 ? 'Loading warehouses...' : 'Select a warehouse'}</option>
-              {warehouses.map((wh) => (<option key={wh.id} value={wh.id}>{wh.name} ({wh.state.replace('STATE_', '').replace('State.', '')})</option>))}
-            </select>
+            {(() => {
+              const selectedWh = warehouses.find((w) => w.id === warehouseId)
+              const isStopped = !!selectedWh && selectedWh.state.includes('STOPPED')
+              const isRunning = !!selectedWh && selectedWh.state.includes('RUNNING')
+              return (
+                <>
+                  <div className="flex items-center gap-2">
+                    <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}
+                      className="flex-1 px-4 py-2.5 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:border-[#6366F1] transition-colors">
+                      <option value="">{warehouses.length === 0 ? 'Loading warehouses...' : 'Select a warehouse'}</option>
+                      {warehouses.map((wh) => (<option key={wh.id} value={wh.id}>{wh.name} ({wh.state.replace('STATE_', '').replace('State.', '')})</option>))}
+                    </select>
+                    {isStopped && (
+                      <button
+                        onClick={startSelectedWarehouse}
+                        disabled={startingWarehouse}
+                        className="shrink-0 flex items-center gap-1.5 px-3 py-2.5 rounded-lg bg-[#6366F1] hover:bg-[#4F46E5] text-white text-sm font-medium transition-colors disabled:opacity-60"
+                        title="Start this SQL warehouse"
+                      >
+                        {startingWarehouse ? <><Loader2 className="w-4 h-4 animate-spin" /> Starting…</> : <><Play className="w-4 h-4" /> Start</>}
+                      </button>
+                    )}
+                  </div>
+                  {isRunning && (
+                    <p className="text-xs text-emerald-600 mt-1">Warehouse is running.</p>
+                  )}
+                  {isStopped && !startingWarehouse && !warehouseError && (
+                    <p className="text-xs text-amber-600 mt-1">This warehouse is stopped — start it to run queries and create the Genie Space.</p>
+                  )}
+                  {startingWarehouse && (
+                    <p className="text-xs text-[var(--text-secondary)] mt-1">Starting the warehouse — this can take a minute or two.</p>
+                  )}
+                </>
+              )
+            })()}
             {warehouseError ? (
               <p className="text-xs text-red-500 mt-1">{warehouseError}</p>
             ) : warehouses.length === 0 && (
