@@ -135,7 +135,8 @@ async def get_supervisor_details(endpoint_name: str, request: Request):
                 params = {"page_token": page_token} if page_token else {}
                 r = await client.get(f"{host}/api/2.1/supervisor-agents", headers=sp_headers, params=params)
                 if r.status_code in (403, 404):
-                    return empty  # preview API not enabled / SP lacks access
+                    # TEMP DEBUG: surface why the SP read failed
+                    return {**empty, "_debug": {"status": r.status_code, "body": r.text[:300]}}
                 r.raise_for_status()
                 data = r.json()
                 for a in data.get("supervisor_agents", []):
