@@ -87,6 +87,7 @@ export default function CreateRoom() {
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set())
   const [schemas, setSchemas] = useState<Record<string, Schema[]>>({})
   const [tables, setTables] = useState<Record<string, Table[]>>({})
+  const [nodeErrors, setNodeErrors] = useState<Record<string, string>>({})
   const [loadingNodes, setLoadingNodes] = useState<Set<string>>(new Set())
   const [pickerSearch, setPickerSearch] = useState('')
   const [searchResults, setSearchResults] = useState<CatalogSearchResult[]>([])
@@ -146,7 +147,13 @@ export default function CreateRoom() {
       setExpandedSchemas((s) => new Set(s).add(key))
       if (!tables[key]) {
         setLoadingNodes((s) => new Set(s).add(key))
-        try { const r = await api.listTables(catalog, schema); setTables((s) => ({ ...s, [key]: r.tables })) } catch {}
+        try {
+          const r = await api.listTables(catalog, schema)
+          setTables((s) => ({ ...s, [key]: r.tables }))
+          setNodeErrors((e) => { const n = { ...e }; delete n[key]; return n })
+        } catch (err: any) {
+          setNodeErrors((e) => ({ ...e, [key]: err.message || 'Failed to load tables' }))
+        }
         setLoadingNodes((s) => { const n = new Set(s); n.delete(key); return n })
       }
     }
@@ -419,7 +426,7 @@ export default function CreateRoom() {
                 searching={searching} searchResults={searchResults} catalogsLoading={catalogsLoading}
                 visibleCatalogs={visibleCatalogs} filteredCatalogs={filteredCatalogs} visibleCount={visibleCount}
                 setVisibleCount={setVisibleCount} expandedCatalogs={expandedCatalogs} expandedSchemas={expandedSchemas}
-                schemas={schemas} tables={tables} loadingNodes={loadingNodes} selectedTables={selectedTables}
+                schemas={schemas} tables={tables} nodeErrors={nodeErrors} loadingNodes={loadingNodes} selectedTables={selectedTables}
                 toggleCatalog={toggleCatalog} toggleSchema={toggleSchema} toggleTable={toggleTable} selectAllInSchema={selectAllInSchema}
                 onClose={() => setPickerOpen(false)} />
             )}
@@ -1619,7 +1626,7 @@ function AnalysisCard({ icon: Icon, title, description, loading, done, disabled,
 function CatalogPicker({
   pickerSearch, setPickerSearch, searching, searchResults,
   catalogsLoading, visibleCatalogs, filteredCatalogs, visibleCount, setVisibleCount,
-  expandedCatalogs, expandedSchemas, schemas, tables, loadingNodes,
+  expandedCatalogs, expandedSchemas, schemas, tables, nodeErrors, loadingNodes,
   selectedTables, toggleCatalog, toggleSchema, toggleTable, selectAllInSchema, onClose,
 }: any) {
   const q = pickerSearch.trim()
@@ -1738,6 +1745,13 @@ function CatalogPicker({
                           </button>
                         )
                       })}
+                      {/* Surface load failures / empty schemas instead of a blank body */}
+                      {expandedSchemas.has(sk) && !loadingNodes.has(sk) && nodeErrors[sk] && (
+                        <p className="ml-8 px-2 py-1.5 text-[11px] text-red-500">{nodeErrors[sk]}</p>
+                      )}
+                      {expandedSchemas.has(sk) && !loadingNodes.has(sk) && !nodeErrors[sk] && tables[sk]?.length === 0 && (
+                        <p className="ml-8 px-2 py-1.5 text-[11px] text-[var(--text-secondary)]">No tables you can access in this schema.</p>
+                      )}
                     </div>
                   )
                 })}
