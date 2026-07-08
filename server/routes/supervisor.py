@@ -1,10 +1,26 @@
 import json
+import re
 import asyncio
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from server.config import get_workspace_host, get_auth_headers
 from server.db import db
 from server.routes.filters import _current_user_email
+
+
+def sanitize_agent_name(title: str) -> str:
+    """Turn a Genie room title into a valid tool/agent name.
+
+    The model tool-call API requires names to match ^[a-zA-Z0-9_-]{1,128}$, so any
+    character outside [a-z0-9_-] must be replaced — not just spaces and slashes.
+    Room titles like "Fintech AI - Credit [Lucas]" contain brackets, parens, dots,
+    apostrophes, accents, etc. that otherwise trigger a 400 BAD_REQUEST on the
+    tools.N.custom.name field. Collapse runs of replacements, trim stray dashes,
+    cap length, and never return empty.
+    """
+    name = re.sub(r"[^a-z0-9_-]+", "-", (title or "").lower())
+    name = re.sub(r"-{2,}", "-", name).strip("-")[:30].strip("-")
+    return name or "agent"
 
 # Lazy-load the langchain stack — its transitive MCP deps occasionally break
 # on Apps redeploys (mcp / langchain-mcp-adapters version skew). Importing at
@@ -103,7 +119,7 @@ def _build_supervisor(rooms: list[dict], instructions: str | None = None):
     agents = []
     agent_descriptions = ""
     for room in rooms:
-        name = room["title"].lower().replace(" ", "-").replace("/", "-")[:30]
+        name = sanitize_agent_name(room["title"])
         desc = room.get("description") or room["title"]
         genie = GenieAgent(
             genie_space_id=room["id"],
@@ -163,7 +179,7 @@ def _extract_answered_by(answer: str, rooms: list[dict]) -> tuple[str, str | Non
 
     # Match agent name to room
     for r in rooms:
-        sanitized = r["title"].lower().replace(" ", "-").replace("/", "-")[:30]
+        sanitized = sanitize_agent_name(r["title"])
         title_lower = r["title"].lower()
         if agent_name in (sanitized, title_lower) or sanitized in agent_name or title_lower in agent_name:
             return clean_answer, r["title"]
@@ -176,7 +192,7 @@ def _extract_results(events_history: list, rooms: list[dict]) -> list[dict]:
     # Build multiple lookup keys per room (exact name, lowered, stripped)
     room_map: dict[str, dict] = {}
     for r in rooms:
-        sanitized = r["title"].lower().replace(" ", "-").replace("/", "-")[:30]
+        sanitized = sanitize_agent_name(r["title"])
         room_map[sanitized] = r
         room_map[r["title"].lower()] = r
         room_map[r["title"]] = r
@@ -218,7 +234,7 @@ def _infer_routed_room(events_history: list, rooms: list[dict]) -> dict | None:
     """Infer which room was routed to from tool calls or handoff messages."""
     sanitized_to_room = {}
     for r in rooms:
-        sanitized = r["title"].lower().replace(" ", "-").replace("/", "-")[:30]
+        sanitized = sanitize_agent_name(r["title"])
         sanitized_to_room[sanitized] = r
 
     for msg in events_history:
