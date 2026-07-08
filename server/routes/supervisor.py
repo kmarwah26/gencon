@@ -3,7 +3,7 @@ import re
 import asyncio
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from server.config import get_workspace_host, get_auth_headers
+from server.config import get_workspace_host, get_auth_headers, get_workspace_client
 from server.db import db
 from server.routes.filters import _current_user_email
 
@@ -111,8 +111,15 @@ class RoutingReasoning(BaseModel):
 # ── Build a supervisor graph for the selected rooms ──
 
 
-def _build_supervisor(rooms: list[dict], instructions: str | None = None):
-    """Create a langgraph supervisor with GenieAgent subagents for each room."""
+def _build_supervisor(rooms: list[dict], instructions: str | None = None, client=None):
+    """Create a langgraph supervisor with GenieAgent subagents for each room.
+
+    `client` is the per-user OBO WorkspaceClient. Passing it makes each GenieAgent
+    run its Genie query as the logged-in user, so their own Unity Catalog grants
+    apply. Without it, GenieAgent falls back to the app's service-principal identity,
+    which typically lacks SELECT on the underlying tables — producing a permission
+    error even when the user themselves has access.
+    """
     _ensure_langchain_imports()
     llm = ChatDatabricks(endpoint=LLM_ENDPOINT)
 
@@ -125,6 +132,7 @@ def _build_supervisor(rooms: list[dict], instructions: str | None = None):
             genie_space_id=room["id"],
             genie_agent_name=name,
             description=desc,
+            client=client,
         )
         genie.name = name
         agents.append(genie)
@@ -262,12 +270,15 @@ def _infer_routed_room(events_history: list, rooms: list[dict]) -> dict | None:
 
 
 @router.post("/supervisor/ask")
-async def supervisor_ask(req: SupervisorAskRequest):
+async def supervisor_ask(req: SupervisorAskRequest, request: Request):
     if not req.room_ids or not req.room_descriptions:
         raise HTTPException(status_code=400, detail="At least one room must be selected")
 
     try:
-        supervisor = _build_supervisor(req.room_descriptions, req.instructions)
+        # Run Genie queries as the logged-in user (OBO) so their own UC grants apply,
+        # instead of the app service principal which usually can't SELECT the tables.
+        obo_client = get_workspace_client(request)
+        supervisor = _build_supervisor(req.room_descriptions, req.instructions, client=obo_client)
 
         # Run the supervisor graph (synchronous langgraph, run in thread)
         limit = max(5, min(req.recursion_limit, 100))
