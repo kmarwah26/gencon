@@ -71,7 +71,9 @@ GIT_PROVIDER = "gitHub"  # gitHub | gitLab | bitbucketCloud | azureDevOpsService
 USER_API_SCOPES = [
     "sql",               # SQL Statement API: EDA, KPI exec, filter queries, execute-sql
     "sql.warehouses",    # Warehouse list/start
-    "catalog.catalogs",  # Unity Catalog browse: catalogs/schemas/tables/columns
+    "catalog.catalogs",  # Unity Catalog: list catalogs
+    "catalog.schemas",   # Unity Catalog: list schemas (catalog.catalogs alone 403s on /schemas)
+    "catalog.tables",    # Unity Catalog: list tables + columns
     "dashboards.genie",  # Genie rooms: list/create/edit/delete, conversations, query results
     "sql.dashboards",    # Lakeview dashboards: create/publish/share/embed
     "files",             # Workspace files browser (list/export notebooks & SQL files)
