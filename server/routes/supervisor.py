@@ -147,13 +147,17 @@ async def get_supervisor_details(endpoint_name: str, request: Request):
                 if agent or not page_token:
                     break
             if not agent:
-                # TEMP DEBUG: show what the SP list returned
-                try:
-                    dbg = await client.get(f"{host}/api/2.1/supervisor-agents", headers=sp_headers)
-                    names = [a.get("endpoint_name") for a in dbg.json().get("supervisor_agents", [])]
-                    return {**empty, "_debug": {"status": dbg.status_code, "looking_for": endpoint_name, "found_endpoints": names}}
-                except Exception as ex:
-                    return {**empty, "_debug": {"exc": str(ex)}}
+                # TEMP DEBUG: compare SP vs OBO list results
+                dbg = {}
+                for label, h in (("sp", sp_headers), ("obo", obo_headers)):
+                    try:
+                        rr = await client.get(f"{host}/api/2.1/supervisor-agents", headers=h)
+                        dbg[label] = {"status": rr.status_code,
+                                      "count": len(rr.json().get("supervisor_agents", [])) if rr.status_code == 200 else None,
+                                      "body": rr.text[:150] if rr.status_code != 200 else None}
+                    except Exception as ex:
+                        dbg[label] = {"exc": str(ex)}
+                return {**empty, "_debug": dbg}
 
             sid = agent.get("supervisor_agent_id") or ""
             result = {
