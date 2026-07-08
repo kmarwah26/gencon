@@ -122,7 +122,7 @@ export default function Setup() {
         <section>
           <StepHeader num={5} title="Deploy to Databricks" />
           <div className="ml-10 space-y-3">
-            <CopyBlock label="Create the app" code="databricks apps create gencon --description &quot;AI/BI Genie Room Manager&quot; -p gencon" />
+            <CopyBlock label="Create the app" code="databricks apps create gencon --description &quot;AI/BI Genie Space Manager&quot; -p gencon" />
             <CopyBlock label="Upload source code" code={`databricks sync . /Workspace/Users/<your-email>/gencon \\
   --exclude node_modules --exclude .venv \\
   --exclude __pycache__ --exclude .git \\

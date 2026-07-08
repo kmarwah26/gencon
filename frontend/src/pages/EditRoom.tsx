@@ -174,7 +174,7 @@ export default function EditRoom() {
           <Pencil className="w-5 h-5 text-white" />
         </div>
         <div className="flex-1">
-          <h2 className="text-2xl font-bold text-[var(--text-primary)]">Edit Genie Room</h2>
+          <h2 className="text-2xl font-bold text-[var(--text-primary)]">Edit Genie Space</h2>
           <p className="text-sm text-[var(--text-secondary)]">Modify tables, instructions, and queries</p>
         </div>
         <button onClick={() => navigate(`/rooms/${roomId}`)}
@@ -366,7 +366,7 @@ export default function EditRoom() {
         {showDeleteConfirm && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
             <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
-              <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">Delete Genie Room</h3>
+              <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">Delete Genie Space</h3>
               <p className="text-sm text-[var(--text-secondary)] mb-1">
                 Are you sure you want to delete <span className="font-semibold text-[var(--text-primary)]">{title}</span>?
               </p>

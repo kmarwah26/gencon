@@ -354,7 +354,7 @@ export default function CreateRoom() {
           <Plus className="w-5 h-5 text-white" />
         </div>
         <div>
-          <h2 className="text-2xl font-bold text-[var(--text-primary)]">Create Genie Room</h2>
+          <h2 className="text-2xl font-bold text-[var(--text-primary)]">Create Genie Space</h2>
           <p className="text-sm text-[var(--text-secondary)]">Set up a new AI-powered data room</p>
         </div>
       </div>
@@ -713,7 +713,7 @@ export default function CreateRoom() {
 
             {/* Dataset Description */}
             <AnalysisCard
-              icon={MessageSquarePlus} title="Dataset Description" description="AI-generated description of your dataset — add it to Genie room instructions"
+              icon={MessageSquarePlus} title="Dataset Description" description="AI-generated description of your dataset — add it to Genie Space instructions"
               loading={datasetDescLoading} done={!!datasetDesc}
               onRun={async () => {
                 setDatasetDescLoading(true)
@@ -1108,7 +1108,7 @@ export default function CreateRoom() {
             </button>
             <button onClick={handleCreate} disabled={creating}
               className="flex-1 py-3 rounded-lg bg-gradient-to-r from-[#6366F1] to-[#4338CA] hover:from-[#4F46E5] hover:to-[#4338CA] text-white font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-              {creating ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating...</> : <><Sparkles className="w-4 h-4" /> Create Genie Room</>}
+              {creating ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating...</> : <><Sparkles className="w-4 h-4" /> Create Genie Space</>}
             </button>
           </div>
         </div>

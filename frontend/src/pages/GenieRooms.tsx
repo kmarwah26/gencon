@@ -55,7 +55,7 @@ export default function GenieRooms() {
             <MessageSquare className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-[var(--text-primary)]">Genie Rooms</h2>
+            <h2 className="text-2xl font-bold text-[var(--text-primary)]">Genie Spaces</h2>
             <p className="text-sm text-[var(--text-secondary)]">
               Your AI-powered data rooms
             </p>
@@ -110,7 +110,7 @@ export default function GenieRooms() {
       {!loading && !error && rooms.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-[var(--text-secondary)]">
           <Sparkles className="w-14 h-14 mb-4 opacity-20" />
-          <p className="text-lg mb-2">No Genie Rooms yet</p>
+          <p className="text-lg mb-2">No Genie Spaces yet</p>
           <p className="text-sm mb-6">Create your first room to start asking questions about your data</p>
           <button
             onClick={() => navigate('/create')}

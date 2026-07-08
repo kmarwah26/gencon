@@ -577,7 +577,7 @@ export default function SampleDataGenerator() {
         <div className="space-y-5">
           <h3 className="text-lg font-semibold text-[var(--text-primary)]">Table & column descriptions</h3>
           <p className="text-sm text-[var(--text-secondary)]">
-            Genie Rooms work best when tables and columns have descriptive metadata. You can choose to auto-generate
+            Genie Spaces work best when tables and columns have descriptive metadata. You can choose to auto-generate
             descriptions using AI, or skip this and add them later.
           </p>
 
@@ -629,7 +629,7 @@ export default function SampleDataGenerator() {
                   </p>
                   <p className="text-xs text-[var(--text-secondary)] mt-0.5">
                     AI will generate table comments and column descriptions after creating each table.
-                    This makes the data immediately ready for Genie Rooms.
+                    This makes the data immediately ready for Genie Spaces.
                   </p>
                   {includeDescriptions && (
                     <div className="mt-3 p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)]">
@@ -821,7 +821,7 @@ export default function SampleDataGenerator() {
                   onClick={() => navigate('/create')}
                   className="py-2.5 px-4 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] text-sm text-[var(--text-primary)] hover:border-[#6366F1]/40 transition-colors"
                 >
-                  Create Genie Room
+                  Create Genie Space
                 </button>
                 <button
                   onClick={() => {

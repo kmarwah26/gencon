@@ -105,7 +105,7 @@ export default function GenieChat() {
   useEffect(() => {
     if (roomId) {
       api.getGenieRoom(roomId).then((r) => {
-        setRoomTitle(r.title || 'Genie Room')
+        setRoomTitle(r.title || 'Genie Space')
         if (r.warehouse_id) setWarehouseId(r.warehouse_id)
         if (r.sample_queries?.length) setSampleQueries(r.sample_queries)
         // Kick off AI suggestion generation in the background based on the room's tables
@@ -116,7 +116,7 @@ export default function GenieChat() {
             .catch(() => {})
             .finally(() => setSuggestedQsLoading(false))
         }
-      }).catch(() => setRoomTitle('Genie Room'))
+      }).catch(() => setRoomTitle('Genie Space'))
     }
     api.getCurrentUser().then((u) => setUserId(u.id)).catch(() => {})
     api.listWarehouses().then((r) => setWarehouses(r.warehouses || [])).catch(() => {})

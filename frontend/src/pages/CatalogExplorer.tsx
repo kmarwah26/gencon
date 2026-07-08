@@ -158,7 +158,7 @@ export default function CatalogExplorer() {
         <div className="p-5 border-b border-[var(--border)]">
           <h2 className="text-xl font-semibold text-[var(--text-primary)]">Unity Catalog</h2>
           <p className="text-sm text-[var(--text-secondary)] mt-1">
-            Browse and select tables for Genie rooms
+            Browse and select tables for Genie Spaces
           </p>
           {/* Search bar */}
           <div className="relative mt-3">
@@ -439,7 +439,7 @@ export default function CatalogExplorer() {
               onClick={() => navigate('/create')}
               className="w-full py-2 rounded-lg bg-[#6366F1] hover:bg-[#4F46E5] text-white text-sm font-medium transition-colors"
             >
-              Create Genie Room
+              Create Genie Space
             </button>
           </div>
         )}

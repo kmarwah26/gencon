@@ -233,7 +233,7 @@ export default function SupervisorChat() {
           </div>
           <div>
             <h2 className="text-base font-semibold text-[var(--text-primary)]">
-              Ask Everything
+              Ask Multiple Genies
             </h2>
             <p className="text-[11px] text-[var(--text-secondary)]">
               {selectedEndpoint

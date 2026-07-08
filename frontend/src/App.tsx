@@ -16,10 +16,10 @@ import SupervisorChat from './pages/SupervisorChat'
 import Services from './pages/Services'
 const tiles = [
   { to: '/catalog', icon: Database, label: 'Explore Data', desc: 'See the customer and campaign data available to your team', color: 'from-[#3B82F6] to-[#4338CA]' },
-  { to: '/create', icon: Plus, label: 'New Assistant', desc: 'Set up an AI assistant for a new dataset', color: 'from-[#6366F1] to-[#A855F7]' },
+  { to: '/create', icon: Plus, label: 'New Genie Space', desc: 'Set up a Genie Space for a new dataset', color: 'from-[#6366F1] to-[#A855F7]' },
   { to: '/rooms', icon: MessageSquare, label: 'Ask Questions', desc: 'Chat with your data and get instant answers', color: 'from-[#22D3EE] to-[#3B82F6]' },
-  { to: '/edit', icon: Pencil, label: 'Manage Assistants', desc: 'Update and fine-tune your assistants', color: 'from-[#F472B6] to-[#FB7185]' },
-  { to: '/supervisor', icon: Network, label: 'Ask Everything', desc: 'One question, answered across all your data', color: 'from-[#EC4899] to-[#4338CA]' },
+  { to: '/edit', icon: Pencil, label: 'Manage Genie Spaces', desc: 'Update and fine-tune your Genie Spaces', color: 'from-[#F472B6] to-[#FB7185]' },
+  { to: '/supervisor', icon: Network, label: 'Ask Multiple Genies', desc: 'One question, answered across all your data', color: 'from-[#EC4899] to-[#4338CA]' },
 ]
 
 export default function App() {
@@ -199,7 +199,7 @@ function Home({ user }: { user: CurrentUser | null }) {
             onClick={() => navigate('/create')}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border)] hover:border-[var(--text-secondary)] text-[var(--text-primary)] text-sm font-semibold transition-colors"
           >
-            <Plus className="w-4 h-4" /> Create an assistant
+            <Plus className="w-4 h-4" /> Create a Genie Space
           </button>
         </div>
       </div>
@@ -267,7 +267,7 @@ function EditRoomPicker() {
             <Pencil className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-[var(--text-primary)]">Edit Genie Room</h2>
+            <h2 className="text-2xl font-bold text-[var(--text-primary)]">Edit Genie Space</h2>
             <p className="text-sm text-[var(--text-secondary)]">Select a room to modify its tables, instructions, and queries</p>
           </div>
         </div>
@@ -288,7 +288,7 @@ function EditRoomPicker() {
       {!loading && !error && rooms.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-[var(--text-secondary)]">
           <Sparkles className="w-14 h-14 mb-4 opacity-20" />
-          <p className="text-lg mb-2">No Genie Rooms yet</p>
+          <p className="text-lg mb-2">No Genie Spaces yet</p>
           <p className="text-sm mb-6">Create your first room to get started</p>
           <button onClick={() => navigate('/create')}
             className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#6366F1] hover:bg-[#4F46E5] text-white text-sm font-medium transition-colors">
@@ -323,7 +323,7 @@ function EditRoomPicker() {
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
-            <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">Delete Genie Room</h3>
+            <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-2">Delete Genie Space</h3>
             <p className="text-sm text-[var(--text-secondary)] mb-1">
               Are you sure you want to delete <span className="font-semibold text-[var(--text-primary)]">{deleteTarget.title}</span>?
             </p>
